@@ -10,7 +10,7 @@ import numpy as np
 import soundfile as sf
 
 from .project import load_project, project_paths, sha256, write_json
-from .pronunciation import apply_to_phonemes, load_reviewed_lexicon
+from .pronunciation import apply_to_phonemes, audit_lexicon, load_reviewed_lexicon
 
 SAMPLE_RATE = 24_000
 
@@ -26,6 +26,12 @@ def generate(project: Path, repo: Path) -> dict[str, Any]:
     paths = project_paths(project)
     config = load_project(project)
     analysis = json.loads((paths["production"] / "analysis.json").read_text(encoding="utf-8"))
+    lexicon_audit = audit_lexicon(project)
+    if not lexicon_audit["ok"]:
+        raise RuntimeError(
+            "Generation is blocked until pronunciation-sensitive vocabulary is reviewed; "
+            "see production/pronunciation-audit.json"
+        )
     lexicon = load_reviewed_lexicon(project)
     model, voices = model_paths(repo)
     if not model.is_file() or not voices.is_file():

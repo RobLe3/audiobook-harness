@@ -2,7 +2,7 @@
 
 A local-first, evidence-based audiobook production harness for coding agents.
 It focuses on manuscript analysis, pronunciation control, contextual dialogue,
-Kokoro TTS, independent speech verification, forced alignment, and reproducible
+Kokoro TTS, independent local speech verification, forced alignment, and reproducible
 M4A/MP3 delivery.
 
 It does **not** bundle manuscripts, cloned voices, music, SFX, synthetic sound
