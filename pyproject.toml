@@ -12,16 +12,16 @@ license = {text = "Apache-2.0"}
 authors = [{name = "Audiobook Harness contributors"}]
 dependencies = [
   "kokoro-onnx==0.5.0",
-  "numpy>=1.26,<3",
-  "soundfile>=0.12,<1",
-  "scipy>=1.12,<2",
-  "rapidfuzz>=3.9,<4",
-  "pyyaml>=6.0,<7",
-  "openai-whisper>=20240930",
+  "numpy==2.4.6",
+  "soundfile==0.14.0",
+  "scipy==1.18.0",
+  "rapidfuzz==3.14.5",
+  "pyyaml==6.0.3",
+  "openai-whisper==20250625",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9", "ruff>=0.6,<1"]
+dev = ["pytest==8.4.2", "ruff==0.15.22"]
 
 [project.scripts]
 audiobook-harness = "audiobook_harness.cli:main"

@@ -48,6 +48,12 @@ def _mfa_profile(config: dict[str, Any]) -> tuple[str, str]:
     return str(dictionary), str(acoustic)
 
 
+def _mfa_environment(repo: Path) -> dict[str, str]:
+    """Keep MFA models local to this repository for both setup and verification."""
+    import os
+    return {**os.environ, "MFA_ROOT_DIR": str(repo / ".tools" / "mfa-root")}
+
+
 def _ffmpeg_wav(source: Path, destination: Path) -> None:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
@@ -114,7 +120,7 @@ def run_mfa_alignment(project: Path, repo: Path, takes: list[dict[str, Any]]) ->
         mfa, "align", "--clean", "--single_speaker", "--output_format", "json",
         "--temporary_directory", str(runtime), str(corpus), dictionary, acoustic, str(aligned),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True)
+    completed = subprocess.run(command, capture_output=True, text=True, env=_mfa_environment(repo))
     complete, missing = _alignment_complete(aligned, takes) if completed.returncode == 0 else (False, [str(t["id"]) for t in takes])
     report.update({
         "dictionary": dictionary, "acoustic_model": acoustic,
