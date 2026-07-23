@@ -1,0 +1,8 @@
+AUDIOBOOK HARNESS :: LOCAL QUALITY LOOP
+
+[ manuscript.txt ]
+       |
+       v
+  ANALYSE  ->  pronunciation + context map
+
+No cloud fallback. No generated SFX.

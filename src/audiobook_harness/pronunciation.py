@@ -9,7 +9,11 @@ from .project import project_paths, write_json
 
 def load_reviewed_lexicon(project: Path) -> dict[str, dict[str, Any]]:
     path = project_paths(project)["lexicon"]
-    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"entries": []}
+    data = (
+        json.loads(path.read_text(encoding="utf-8"))
+        if path.exists()
+        else {"entries": []}
+    )
     entries = data.get("entries", [])
     if not isinstance(entries, list):
         raise ValueError("lexicon.json entries must be a list")
@@ -23,13 +27,28 @@ def load_reviewed_lexicon(project: Path) -> dict[str, dict[str, Any]]:
 
 def audit_lexicon(project: Path) -> dict[str, Any]:
     paths = project_paths(project)
-    analysis = json.loads((paths["production"] / "analysis.json").read_text(encoding="utf-8"))
+    analysis = json.loads(
+        (paths["production"] / "analysis.json").read_text(encoding="utf-8")
+    )
     lexicon = load_reviewed_lexicon(project)
     required = analysis.get("unresolved_lexicon_candidates", [])
     missing = [term for term in required if term not in lexicon]
-    unreviewed = [term for term in required if term in lexicon and lexicon[term].get("review_status") != "reviewed"]
-    invalid = [term for term, row in lexicon.items() if row.get("review_status") == "reviewed" and not row.get("phoneme_override")]
-    report = {"ok": not missing and not unreviewed and not invalid, "missing": missing, "unreviewed": unreviewed, "invalid": invalid}
+    unreviewed = [
+        term
+        for term in required
+        if term in lexicon and lexicon[term].get("review_status") != "reviewed"
+    ]
+    invalid = [
+        term
+        for term, row in lexicon.items()
+        if row.get("review_status") == "reviewed" and not row.get("phoneme_override")
+    ]
+    report = {
+        "ok": not missing and not unreviewed and not invalid,
+        "missing": missing,
+        "unreviewed": unreviewed,
+        "invalid": invalid,
+    }
     write_json(paths["production"] / "pronunciation-audit.json", report)
     return report
 
@@ -39,8 +58,14 @@ def apply_to_phonemes(
 ) -> str:
     """Replace only the model's matching phoneme spans, never raw words."""
     resolved = phonemes
-    for published, row in sorted(lexicon.items(), key=lambda item: len(item[0]), reverse=True):
-        if published not in text or row.get("review_status") != "reviewed" or not row.get("phoneme_override"):
+    for published, row in sorted(
+        lexicon.items(), key=lambda item: len(item[0]), reverse=True
+    ):
+        if (
+            published not in text
+            or row.get("review_status") != "reviewed"
+            or not row.get("phoneme_override")
+        ):
             continue
         default = str(phonemize(published))
         if default not in resolved:

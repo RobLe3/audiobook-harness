@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -25,9 +24,17 @@ def generate(project: Path, repo: Path) -> dict[str, Any]:
 
     paths = project_paths(project)
     config = load_project(project)
-    analysis = json.loads((paths["production"] / "analysis.json").read_text(encoding="utf-8"))
+    analysis = json.loads(
+        (paths["production"] / "analysis.json").read_text(encoding="utf-8")
+    )
     lexicon_audit = audit_lexicon(project)
-    if not lexicon_audit["ok"]:
+    context_review = list(analysis.get("contextual_dialogue_review_required", []))
+    if not lexicon_audit["ok"] or context_review:
+        if context_review:
+            raise RuntimeError(
+                "Generation is blocked until a terse final dialogue unit receives real manuscript context; "
+                f"review {', '.join(context_review)}."
+            )
         raise RuntimeError(
             "Generation is blocked until pronunciation-sensitive vocabulary is reviewed; "
             "see production/pronunciation-audit.json"
@@ -35,7 +42,9 @@ def generate(project: Path, repo: Path) -> dict[str, Any]:
     lexicon = load_reviewed_lexicon(project)
     model, voices = model_paths(repo)
     if not model.is_file() or not voices.is_file():
-        raise FileNotFoundError("Kokoro model files are missing; run scripts/setup.py --download-models")
+        raise FileNotFoundError(
+            "Kokoro model files are missing; run scripts/setup.py --download-models"
+        )
     voice = str(config.get("voice", {}).get("id", "bm_george"))
     speed = float(config.get("voice", {}).get("speed", 0.95))
     language = str(config.get("language", "en-gb"))
@@ -46,15 +55,54 @@ def generate(project: Path, repo: Path) -> dict[str, Any]:
             text = str(unit["text"])
             phonemes = engine.tokenizer.phonemize(text, language)
             phonemes = apply_to_phonemes(
-                text, phonemes, lexicon, lambda value: engine.tokenizer.phonemize(value, language)
+                text,
+                phonemes,
+                lexicon,
+                lambda value: engine.tokenizer.phonemize(value, language),
             )
-            audio, rate = engine.create(phonemes, voice=voice, speed=speed, lang=language, trim=True, is_phonemes=True)
+            audio, rate = engine.create(
+                phonemes,
+                voice=voice,
+                speed=speed,
+                lang=language,
+                trim=True,
+                is_phonemes=True,
+            )
             if rate != SAMPLE_RATE:
-                raise RuntimeError(f"Expected Kokoro {SAMPLE_RATE} Hz output, received {rate}")
+                raise RuntimeError(
+                    f"Expected Kokoro {SAMPLE_RATE} Hz output, received {rate}"
+                )
             target = paths["assets"] / chapter["id"] / f"{unit['id']}.flac"
             target.parent.mkdir(parents=True, exist_ok=True)
-            sf.write(target, np.asarray(audio, dtype=np.float32), rate, subtype="PCM_24", format="FLAC")
-            rows.append({"id": unit["id"], "chapter": chapter["id"], "text": text, "phonemes": phonemes, "voice": voice, "speed": speed, "file": str(target.relative_to(project)), "sha256": sha256(target)})
+            sf.write(
+                target,
+                np.asarray(audio, dtype=np.float32),
+                rate,
+                subtype="PCM_24",
+                format="FLAC",
+            )
+            rows.append(
+                {
+                    "id": unit["id"],
+                    "chapter": chapter["id"],
+                    "text": text,
+                    "phonemes": phonemes,
+                    "voice": voice,
+                    "speed": speed,
+                    "file": str(target.relative_to(project)),
+                    "sha256": sha256(target),
+                    "source_sentence_indexes": unit.get("source_sentence_indexes", []),
+                    "context_strategy": unit.get(
+                        "context_strategy", "complete_sentence"
+                    ),
+                    "contains_terse_dialogue": bool(
+                        unit.get("contains_terse_dialogue", False)
+                    ),
+                    "requires_context_review": bool(
+                        unit.get("requires_context_review", False)
+                    ),
+                }
+            )
     report = {"version": 1, "offline": True, "sample_rate": SAMPLE_RATE, "takes": rows}
     write_json(paths["production"] / "generation.json", report)
     return report
@@ -63,7 +111,9 @@ def generate(project: Path, repo: Path) -> dict[str, Any]:
 def assemble(project: Path) -> dict[str, Any]:
     """Join already-verified takes and create lossless master plus M4A/MP3."""
     paths = project_paths(project)
-    verification = json.loads((paths["production"] / "verification.json").read_text(encoding="utf-8"))
+    verification = json.loads(
+        (paths["production"] / "verification.json").read_text(encoding="utf-8")
+    )
     if not verification.get("ok"):
         raise RuntimeError("Cannot release: verification is not successful")
     grouped: dict[str, list[dict[str, Any]]] = {}
@@ -72,19 +122,50 @@ def assemble(project: Path) -> dict[str, Any]:
     outputs = []
     for chapter, rows in grouped.items():
         concat = paths["production"] / f"{chapter}.ffconcat"
-        concat.write_text("ffconcat version 1.0\n" + "".join(f"file '../{row['file']}'\n" for row in rows), encoding="utf-8")
-        master = paths["deliverables"] / f"{chapter}_Audiobook.flac"; master.parent.mkdir(parents=True, exist_ok=True)
-        for suffix, codec, extra in ((".flac", "flac", []), (".m4a", "aac", ["-b:a", "256k"]), (".mp3", "libmp3lame", ["-b:a", "256k"])):
+        concat.write_text(
+            "ffconcat version 1.0\n"
+            + "".join(f"file '../{row['file']}'\n" for row in rows),
+            encoding="utf-8",
+        )
+        master = paths["deliverables"] / f"{chapter}_Audiobook.flac"
+        master.parent.mkdir(parents=True, exist_ok=True)
+        for suffix, codec, extra in (
+            (".flac", "flac", []),
+            (".m4a", "aac", ["-b:a", "256k"]),
+            (".mp3", "libmp3lame", ["-b:a", "256k"]),
+        ):
             target = master.with_suffix(suffix)
-            command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c:a", codec, *extra, str(target)]
+            command = [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(concat),
+                "-c:a",
+                codec,
+                *extra,
+                str(target),
+            ]
             if shutil.which("ffmpeg") is None:
                 raise RuntimeError("ffmpeg is required for release")
             __import__("subprocess").run(command, check=True)
         chapter_outputs = []
         for suffix in (".flac", ".m4a", ".mp3"):
             target = master.with_suffix(suffix)
-            chapter_outputs.append({"file": str(target.relative_to(project)), "sha256": sha256(target)})
+            chapter_outputs.append(
+                {"file": str(target.relative_to(project)), "sha256": sha256(target)}
+            )
         outputs.append({"chapter": chapter, "files": chapter_outputs})
-    report = {"version": 2, "release_rule": "only verified, hash-recorded take files may be packaged", "outputs": outputs}
+    report = {
+        "version": 2,
+        "release_rule": "only verified, hash-recorded take files may be packaged",
+        "outputs": outputs,
+    }
     write_json(paths["production"] / "release-manifest.json", report)
     return report

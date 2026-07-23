@@ -1,0 +1,10 @@
+01  ANALYSE
+
+  manuscript
+      |
+      +-- names / foreign terms / acronyms / numbers
+      |
+      +-- sentence + pause boundaries
+      |
+      `-- short quoted dialogue
+            -> real adjacent manuscript context

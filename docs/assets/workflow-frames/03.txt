@@ -1,0 +1,7 @@
+02  REVIEW THE LEXICON
+
+  Renaud     -> reviewed IPA / source
+  AC/DC      -> readable spoken form
+  2044       -> normalized spoken number
+
+  unresolved term?  ->  STOP BEFORE TTS

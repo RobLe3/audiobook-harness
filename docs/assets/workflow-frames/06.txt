@@ -1,0 +1,8 @@
+05  REJECT OR APPROVE
+
+  mismatch / malformed pronunciation / unsafe short reply
+       |
+       +--> revise lexicon or real-manuscript context
+       `--> regenerate ONLY the affected take
+
+  approved take -> immutable hash record

@@ -1,0 +1,9 @@
+06  RELEASE
+
+  verified takes only
+       |
+       v
+  lossless FLAC + M4A + MP3
+       |
+       v
+  release manifest with output hashes

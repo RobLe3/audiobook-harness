@@ -1,9 +1,25 @@
 # Quality contract
 
 The public baseline uses: manuscript analysis, reviewed pronunciation mapping,
-semantic sentence units, deterministic Kokoro takes, two local Whisper passes,
-word-level comparison, acoustic duration/peak checks, MFA availability, and
+semantic performance units, deterministic Kokoro takes, two local Whisper passes,
+word-level comparison, acoustic duration/peak checks, MFA alignment, and
 hash-bound release manifests.
+
+## Terse dialogue guard
+
+A one-to-five-word quoted reply is not synthesized in isolation. The analysis
+stage binds it to an immediately adjacent sentence from the supplied manuscript
+and records the source-sentence indexes and `adjacent_manuscript_context`
+strategy in `production/analysis.json`. This prevents a common TTS artefact:
+exaggerated terminal vowels or question contours caused by a tiny standalone
+request. The public harness does **not** invent character voices, splice
+phonemes, or fabricate a surrounding context. It uses only the real adjacent
+manuscript text, in order, in one verified take.
+
+If a final quoted reply has no adjacent sentence, analysis records it as a
+review case. Add a real neighbouring sentence where editorially appropriate or
+handle it as a deliberately reviewed exception; do not pad it with invented
+text.
 
 Professional releases must pass all automated gates. A failed or ambiguous take
 is not released: correct the source map, create a controlled replacement, and

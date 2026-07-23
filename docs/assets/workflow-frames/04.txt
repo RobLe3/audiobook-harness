@@ -1,0 +1,9 @@
+03  GENERATE
+
+  semantic performance unit
+        |
+        v
+  Kokoro (fixed voice + speed + local model)
+        |
+        v
+  lossless take + phoneme + hash evidence

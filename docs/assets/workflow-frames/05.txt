@@ -1,0 +1,8 @@
+04  VERIFY EACH TAKE
+
+  Whisper A  ----\
+                 +--> compare expected spoken text
+  Whisper B  ----/     duration / peak / silence checks
+                         |
+                         v
+                    local MFA alignment
