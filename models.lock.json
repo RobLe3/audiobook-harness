@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "policy": "Downloaded only by scripts/setup.py after explicit opt-in. Production never downloads weights.",
+  "models": [
+    {"id":"kokoro-v1.0","path":".tools/kokoro/models/kokoro-v1.0.onnx","url":"https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx","sha256":"7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5","license_note":"Review upstream Kokoro model terms before use."},
+    {"id":"kokoro-voices-v1.0","path":".tools/kokoro/models/voices-v1.0.bin","url":"https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin","sha256":"bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d","license_note":"Review upstream Kokoro voice terms before use."},
+    {"id":"whisper-base","path":".tools/whisper/models/base.pt","url":"https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt","sha256":"ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e","license_note":"Review OpenAI Whisper license and model terms before use."},
+    {"id":"whisper-large-v3-turbo","path":".tools/whisper/models/large-v3-turbo.pt","url":"https://openaipublic.azureedge.net/main/whisper/models/aff26ae408abcba5fbf8813c21e62b0941638c5f6eebfb145be0c9839262a19a/large-v3-turbo.pt","sha256":"aff26ae408abcba5fbf8813c21e62b0941638c5f6eebfb145be0c9839262a19a","license_note":"Review OpenAI Whisper license and model terms before use."}
+  ]
+}

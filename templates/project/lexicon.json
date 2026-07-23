@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "published": "ExampleName",
+      "spoken": "Example Name",
+      "phoneme_override": "ɪɡzˈɑːmpəl nˈeɪm",
+      "language": "en-gb",
+      "source": "Author-approved pronunciation",
+      "review_status": "reviewed"
+    }
+  ]
+}

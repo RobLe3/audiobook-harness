@@ -1,0 +1,7 @@
+title: "Untitled audiobook"
+language: en-gb
+voice:
+  id: bm_george
+  speed: 0.95
+quality_tier: professional
+outputs: [m4a, mp3]
