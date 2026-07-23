@@ -1,0 +1,10 @@
+# Docker smoke tests must never receive local history, environments, models,
+# manuscripts, generated audio, or project workspaces.
+.git/
+.venv/
+.tools/
+projects/
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store

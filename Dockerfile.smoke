@@ -1,0 +1,16 @@
+# Local onboarding smoke image; not a published runtime image.
+# It intentionally does not download Kokoro, Whisper, or MFA models.
+FROM python:3.12-slim
+
+WORKDIR /app
+COPY . /app
+
+# Verifies that explicit system-tool bootstrap works as container root, then
+# installs only Python package dependencies. Model downloads remain opt-in.
+RUN python scripts/setup.py --yes --install-system \
+ && .venv/bin/audiobook-harness new-project /tmp/sample-book \
+ && printf '%s\n' '“Are you hurt?” “I am okay.” “Can you fight?” “I can fight.”' > /tmp/sample-book/source/chapter-01.txt \
+ && .venv/bin/audiobook-harness analyze /tmp/sample-book > /tmp/analysis.json \
+ && .venv/bin/python -c "import json; units=json.load(open('/tmp/analysis.json'))['chapters'][0]['units']; assert len(units) == 2 and all(unit['context_strategy'] == 'adjacent_manuscript_context' for unit in units)"
+
+CMD [".venv/bin/audiobook-harness", "doctor"]

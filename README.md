@@ -32,4 +32,5 @@ On Windows, use `.venv\\Scripts\\audiobook-harness.exe` instead.
 Start with the plain-language [first-book guide](docs/GETTING_STARTED.md), then
 read [setup](docs/SETUP.md), the [quality contract](docs/QUALITY.md),
 [performance planning](docs/PERFORMANCE.md), [workflow architecture](docs/ARCHITECTURE.md), and the agent
-[skill](skills/audiobook-harness/SKILL.md).
+[skill](skills/audiobook-harness/SKILL.md). A local, model-free Linux onboarding check is documented in
+[Container smoke test](docs/SETUP.md#container-smoke-test).
