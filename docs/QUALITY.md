@@ -14,3 +14,12 @@ similarity.
 The harness intentionally does not ship sound effects. Optional user-provided
 real-world recordings belong in a future sound-design integration and must carry
 license, provenance, placement, gain, and speech-clearance metadata.
+
+## Forced alignment
+
+Professional verification runs local MFA alignment after both independent local
+Whisper transcriptions. Each generated take is converted to an isolated WAV/LAB
+pair and must produce a matching JSON alignment record. MFA is an evidence gate,
+not a model downloader: the starter profile uses locally installed English MFA
+models. A non-English project must explicitly name already installed local
+`mfa.dictionary` and `mfa.acoustic_model` values in `project.yaml`.

@@ -5,3 +5,9 @@ voice:
   speed: 0.95
 quality_tier: professional
 outputs: [m4a, mp3]
+
+# English models are installed only by explicit setup. For another language, declare
+# already-installed local MFA identifiers here; verification never downloads them.
+mfa:
+  dictionary: english_us_arpa
+  acoustic_model: english_us_arpa
