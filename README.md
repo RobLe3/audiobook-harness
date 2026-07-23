@@ -23,5 +23,7 @@ python scripts/setup.py --interactive
 
 On Windows, use `.venv\\Scripts\\audiobook-harness.exe` instead.
 
-See [docs/SETUP.md](docs/SETUP.md), [docs/QUALITY.md](docs/QUALITY.md), and the
-agent [skill](skills/audiobook-harness/SKILL.md).
+Start with the plain-language [first-book guide](docs/GETTING_STARTED.md), then
+read [setup](docs/SETUP.md), the [quality contract](docs/QUALITY.md),
+[performance planning](docs/PERFORMANCE.md), and the agent
+[skill](skills/audiobook-harness/SKILL.md).
