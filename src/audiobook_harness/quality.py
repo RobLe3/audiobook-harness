@@ -10,8 +10,8 @@ import numpy as np
 import soundfile as sf
 from rapidfuzz.distance import Levenshtein
 
-from .project import load_project, normalized_words, project_paths, write_json
-from .pronunciation import audit_lexicon
+from .project import load_project, normalized_words, project_paths, sha256, write_json
+from .pronunciation import asr_equivalences, audit_lexicon, load_reviewed_lexicon
 
 
 def _transcribe(model: Any, audio: Path) -> str:
@@ -182,19 +182,56 @@ def run_mfa_alignment(
     return report
 
 
+def _normalized_asr(text: str, equivalences: list[tuple[str, str]]) -> list[str]:
+    import re
+
+    for observed, expected in equivalences:
+        text = re.sub(
+            r"(?<!\w)" + re.escape(observed) + r"(?!\w)",
+            expected,
+            text,
+            flags=re.IGNORECASE,
+        )
+    return normalized_words(text)
+
+
+def _acoustic_checks(mono: np.ndarray, rate: int, words: int) -> list[str]:
+    failures: list[str] = []
+    if not len(mono):
+        return ["empty_audio"]
+    if float(np.max(np.abs(mono))) >= 0.995:
+        failures.append("clipping")
+    duration = len(mono) / max(1, rate)
+    if duration < 0.15 or duration > max(2.0, words * 1.25):
+        failures.append("abnormal_duration")
+    if words and duration / words > 1.6:
+        failures.append("long_word_duration_risk")
+    frame = max(1, int(rate * 0.02))
+    usable = mono[: len(mono) - len(mono) % frame]
+    if len(usable):
+        quiet = np.sqrt(
+            np.mean(usable.reshape(-1, frame) ** 2, axis=1) + 1e-12
+        ) < 10 ** (-55 / 20)
+        longest = current = 0
+        for value in quiet:
+            current = current + 1 if value else 0
+            longest = max(longest, current)
+        if longest * frame / rate > 2.0:
+            failures.append("unexpected_silence")
+    return failures
+
+
 def verify(project: Path, repo: Path) -> dict[str, Any]:
     import whisper
 
     paths = project_paths(project)
     lexicon_report = audit_lexicon(project)
-    generation = json.loads(
-        (paths["production"] / "generation.json").read_text(encoding="utf-8")
-    )
-    takes = list(generation["takes"])
-    whisper_root = repo / ".tools/whisper/models"
+    candidates = json.loads((paths["production"] / "candidates.json").read_text())[
+        "candidates"
+    ]
     primary_path, secondary_path = (
-        whisper_root / "large-v3-turbo.pt",
-        whisper_root / "base.pt",
+        repo / ".tools/whisper/models/large-v3-turbo.pt",
+        repo / ".tools/whisper/models/base.pt",
     )
     if not primary_path.exists() or not secondary_path.exists():
         raise FileNotFoundError(
@@ -204,48 +241,89 @@ def verify(project: Path, repo: Path) -> dict[str, Any]:
         whisper.load_model(str(primary_path)),
         whisper.load_model(str(secondary_path)),
     )
-    rows: list[dict[str, Any]] = []
+    lexicon = load_reviewed_lexicon(project)
+    equivalents = asr_equivalences(lexicon)
+    old = (
+        json.loads((paths["production"] / "verification.json").read_text())
+        if (paths["production"] / "verification.json").exists()
+        else {}
+    )
+    old_by_id = {str(row["id"]): row for row in old.get("takes", []) if row.get("ok")}
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in candidates:
+        grouped.setdefault(str(row["id"]), []).append(row)
+    selected: list[dict[str, Any]] = []
     failures: list[str] = []
-    for take in takes:
-        audio_path = project / str(take["file"])
-        audio, rate = sf.read(audio_path, dtype="float32")
-        mono = np.mean(audio, axis=1) if getattr(audio, "ndim", 1) > 1 else audio
-        expected = normalized_words(str(take["text"]))
-        first, second = (
-            normalized_words(_transcribe(primary, audio_path)),
-            normalized_words(_transcribe(secondary, audio_path)),
+    for unit_id, options in grouped.items():
+        attempts = []
+        for take in options:
+            audio_path = project / str(take["file"])
+            audio, rate = sf.read(audio_path, dtype="float32")
+            mono = np.mean(audio, axis=1) if getattr(audio, "ndim", 1) > 1 else audio
+            expected = normalized_words(str(take["text"]))
+            first = _normalized_asr(_transcribe(primary, audio_path), equivalents)
+            second = _normalized_asr(_transcribe(secondary, audio_path), equivalents)
+            first_error = Levenshtein.distance(expected, first) / max(1, len(expected))
+            second_error = Levenshtein.distance(expected, second) / max(
+                1, len(expected)
+            )
+            acoustic = _acoustic_checks(mono, rate, len(expected))
+            attempt = {
+                **take,
+                "primary_text": " ".join(first),
+                "secondary_text": " ".join(second),
+                "primary_wer": round(first_error, 4),
+                "secondary_wer": round(second_error, 4),
+                "duration_seconds": len(mono) / rate,
+                "acoustic_failures": acoustic,
+                "ok": first_error <= 0.01 and second_error <= 0.01 and not acoustic,
+            }
+            attempts.append(attempt)
+        passing = [row for row in attempts if row["ok"]]
+        passing.sort(
+            key=lambda row: (abs(float(row["speed"]) - 0.95), str(row["candidate"]))
         )
-        first_error = Levenshtein.distance(expected, first) / max(1, len(expected))
-        second_error = Levenshtein.distance(expected, second) / max(1, len(expected))
-        peak = float(np.max(np.abs(mono))) if len(mono) else 0.0
-        duration = len(mono) / rate if rate else 0.0
-        ok = (
-            first_error <= 0.01
-            and second_error <= 0.01
-            and peak < 0.995
-            and 0.15 <= duration <= max(2.0, len(expected) * 1.25)
-        )
-        row = {
-            **take,
-            "primary_text": " ".join(first),
-            "secondary_text": " ".join(second),
-            "primary_wer": round(first_error, 4),
-            "secondary_wer": round(second_error, 4),
-            "peak": peak,
-            "duration_seconds": duration,
-            "ok": ok,
-        }
-        rows.append(row)
-        if not ok:
-            failures.append(str(take["id"]))
-    alignment = run_mfa_alignment(project, repo, takes)
+        if passing:
+            selected.append(
+                {
+                    **passing[0],
+                    "selection_reason": "closest verified deterministic candidate",
+                }
+            )
+            continue
+        previous = old_by_id.get(unit_id)
+        if (
+            previous
+            and any(
+                str(row.get("source_hash")) == str(previous.get("source_hash"))
+                for row in options
+            )
+            and (project / str(previous["file"])).is_file()
+            and sha256(project / str(previous["file"])) == previous.get("sha256")
+        ):
+            selected.append(
+                {
+                    **previous,
+                    "retained_predecessor": True,
+                    "selection_reason": "ambiguous replacement rejected; retained verified predecessor",
+                }
+            )
+            continue
+        failures.append(unit_id)
+    alignment = (
+        run_mfa_alignment(project, repo, selected)
+        if selected
+        else {"ok": False, "failure": "no verified takes"}
+    )
     report = {
-        "version": 2,
+        "version": 3,
         "ok": lexicon_report["ok"] and not failures and alignment["ok"],
+        "candidate_policy": "dual ASR, acoustic checks, alignment, and hash-bound selection",
         "lexicon": lexicon_report,
         "forced_alignment": alignment,
-        "takes": rows,
+        "takes": selected,
         "failures": failures,
+        "asr_phrase_equivalences": len(equivalents),
     }
     write_json(paths["production"] / "verification.json", report)
     return report

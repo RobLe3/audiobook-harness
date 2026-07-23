@@ -65,3 +65,27 @@ def test_terse_adjacent_dialogue_is_one_contextual_performance_unit():
 def test_uncontextualised_final_terse_quote_requires_review():
     unit = performance_units("“Yes.”")[0]
     assert unit["requires_context_review"] is True
+
+
+def test_phrase_scoped_asr_equivalences_require_reviewed_phrase():
+    from audiobook_harness.pronunciation import asr_equivalences
+
+    lexicon = {
+        "Example Phrase": {
+            "review_status": "reviewed",
+            "scope": "phrase",
+            "spoken": "Example Phrase",
+            "asr_equivalents": ["Example Frase"],
+        },
+        "Not Scoped": {"review_status": "reviewed", "asr_equivalents": ["Ignored"]},
+    }
+    assert asr_equivalences(lexicon) == [("Example Frase", "Example Phrase")]
+
+
+def test_retry_variants_extend_the_initial_bounded_set():
+    from audiobook_harness.tts import RETRY_VARIANTS, VARIANTS
+
+    assert set(VARIANTS).issubset(set(RETRY_VARIANTS))
+    assert {name for name, _ in RETRY_VARIANTS}.issuperset(
+        {"retry_slower", "retry_faster"}
+    )

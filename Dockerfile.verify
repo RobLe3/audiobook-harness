@@ -1,0 +1,5 @@
+# Explicit local verification image. It includes no manuscript, model, or MFA data.
+FROM audiobook-harness:smoke
+WORKDIR /work
+ENTRYPOINT ["/app/.venv/bin/audiobook-harness"]
+CMD ["doctor"]

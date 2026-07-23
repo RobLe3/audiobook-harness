@@ -3,7 +3,7 @@
 A local-first, evidence-based audiobook production harness for coding agents.
 It focuses on manuscript analysis, pronunciation control, contextual dialogue,
 Kokoro TTS, independent local speech verification, forced alignment, and reproducible
-M4A/MP3 delivery.
+M4A/MP3 delivery with staged promotion.
 
 It does **not** bundle manuscripts, cloned voices, music, SFX, synthetic sound
 generation, or cloud APIs.
@@ -24,7 +24,9 @@ python scripts/setup.py --interactive
 .venv/bin/audiobook-harness analyze projects/my-book
 .venv/bin/audiobook-harness generate projects/my-book
 .venv/bin/audiobook-harness verify projects/my-book
-.venv/bin/audiobook-harness release projects/my-book
+.venv/bin/audiobook-harness stage projects/my-book
+.venv/bin/audiobook-harness status projects/my-book --watch
+.venv/bin/audiobook-harness promote projects/my-book
 ```
 
 On Windows, use `.venv\\Scripts\\audiobook-harness.exe` instead.

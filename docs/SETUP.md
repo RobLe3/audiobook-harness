@@ -47,3 +47,20 @@ docker run --rm --network none audiobook-harness:smoke
 A full generation/verification run additionally needs the explicit, pinned model
 download and a locally installed MFA profile; it is intentionally not hidden in
 the smoke image.
+
+## Offline verification container
+
+The verification image contains the harness and system tools, but no manuscript,
+model weights, MFA profiles, generated audio, or credentials. Build it after the
+smoke image, then mount **Linux-compatible** local tools and a project directory.
+Normal verification runs with networking disabled.
+
+```bash
+docker build -f Dockerfile.smoke -t audiobook-harness:smoke .
+docker build -f Dockerfile.verify -t audiobook-harness:verify .
+scripts/docker-verify-offline.sh /path/to/linux-tools /path/to/project verify
+```
+
+Prepare the mounted tools deliberately for the same Linux architecture. A tool
+or MFA binary created for another operating system is not portable. The container
+never downloads or modifies the mounted tools directory.

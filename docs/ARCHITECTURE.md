@@ -1,16 +1,16 @@
 # Architecture
 
-`analyze` produces a source-preserving analysis manifest, blocks unresolved
-pronunciation-sensitive vocabulary, and converts sentences into semantic
-performance units. Terse one-to-five-word quoted turns are grouped with real
-adjacent manuscript context before synthesis; their source sentence indexes are
-retained in the manifest. `generate` creates one deterministic Kokoro take per
-performance unit and records text, phonemes, strategy, and file hashes.
-`verify` runs primary and secondary local Whisper decoding, lexical comparison,
-peak/duration checks, and per-take local MFA alignment. `release` only joins
-verified takes and packages lossless FLAC, M4A, and MP3.
+The harness keeps source analysis, candidate generation, verification, staging,
+and publication separate. Each UTF-8 chapter becomes source-preserving semantic
+performance units. Reviewed lexicon entries apply IPA only to matching model
+phoneme spans.
 
-The public v0.1 baseline deliberately avoids unproven emotional DSP, synthetic
-breaths, SFX generation, opaque model selection, and cloud fallback. Future
-quality modules must add a schema, evidence, deterministic test fixture, and a
-blocking release rule before becoming defaults.
+`generate` creates bounded deterministic candidates. `verify` uses two local
+ASR passes, phrase-scoped reviewed equivalences, acoustic checks, source hashes,
+and local MFA alignment to select one candidate per unit. `stage` packages only
+selected takes into a hash-bound batch. `promote` checks that the verification
+manifest is still current before replacing deliverables.
+
+Lifecycle state is stored under `production/run-status.json`; `status --watch`
+renders a portable `production/progress.md`. Production remains local and offline
+after explicit setup.

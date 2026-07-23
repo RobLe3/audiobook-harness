@@ -53,6 +53,21 @@ def audit_lexicon(project: Path) -> dict[str, Any]:
     return report
 
 
+def asr_equivalences(lexicon: dict[str, dict[str, Any]]) -> list[tuple[str, str]]:
+    """Return reviewed, phrase-scoped ASR spellings without changing synthesis text."""
+    pairs: list[tuple[str, str]] = []
+    for published, row in lexicon.items():
+        if (
+            row.get("review_status") != "reviewed"
+            or row.get("scope", "term") != "phrase"
+        ):
+            continue
+        for spelling in row.get("asr_equivalents", []):
+            if isinstance(spelling, str) and spelling.strip():
+                pairs.append((spelling, str(row.get("spoken", published))))
+    return pairs
+
+
 def apply_to_phonemes(
     text: str, phonemes: str, lexicon: dict[str, dict[str, Any]], phonemize: Any
 ) -> str:

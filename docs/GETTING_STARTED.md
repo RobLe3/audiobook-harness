@@ -36,10 +36,8 @@ fallbacks.
    `phoneme_override` and set `review_status` to `reviewed`. Do **not** guess a
    phonetic spelling: listen to a small test or use a reliable pronunciation
    source.
-8. Run `generate`, then `verify`. Verification requires two local Whisper
-   decoders and per-take local MFA alignment. A failed take is not releasable.
-9. Run `release`. It writes hash-recorded FLAC, M4A, and MP3 files beneath the
-   project’s `deliverables/` directory.
+8. Run `generate`, then `verify`. Generation creates bounded deterministic candidates; verification selects only a candidate that passes two local Whisper decoders, acoustic checks, and per-take local MFA alignment.
+9. Run `stage`, monitor `status --watch`, then run `promote`. Promotion is blocked until the staged manifest still matches successful verification.
 
 ## The normal command sequence
 
@@ -48,7 +46,9 @@ fallbacks.
 # review lexicon.json until production/pronunciation-audit.json is OK
 .venv/bin/audiobook-harness generate projects/my-book
 .venv/bin/audiobook-harness verify projects/my-book
-.venv/bin/audiobook-harness release projects/my-book
+.venv/bin/audiobook-harness stage projects/my-book
+.venv/bin/audiobook-harness status projects/my-book --watch
+.venv/bin/audiobook-harness promote projects/my-book
 ```
 
 ## What “blocked” means
@@ -59,7 +59,8 @@ A block is a safety feature, not an invitation to bypass a check.
 | --- | --- | --- |
 | `doctor` is not OK | A local prerequisite or pinned model is absent. | Run explicit setup or install the named prerequisite. |
 | Unresolved lexicon term | The harness cannot safely guess the pronunciation. | Review `lexicon.json`, then re-run `analyze`. |
-| ASR, acoustic, or alignment failure | The generated take is not proven against the expected text. | Correct text/punctuation/lexicon and regenerate; do not release it. |
+| ASR, acoustic, or alignment failure | No candidate is proven against the expected text. | Correct the lexicon or manuscript context, run `retry`, then verify again. |
+| Staging or promotion block | The batch is incomplete or its verification evidence changed. | Re-run verification and stage a complete batch; do not copy files manually. |
 | Non-English MFA profile missing | MFA would have to guess/download a model. | Install a local model deliberately and name it in `project.yaml`. |
 
 ## Keep the project portable

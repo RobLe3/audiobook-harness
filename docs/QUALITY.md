@@ -1,41 +1,55 @@
 # Quality contract
 
-The public baseline uses: manuscript analysis, reviewed pronunciation mapping,
-semantic performance units, deterministic Kokoro takes, two local Whisper passes,
-word-level comparison, acoustic duration/peak checks, MFA alignment, and
-hash-bound release manifests.
+The local production contract is: analyse, review pronunciation-sensitive terms,
+generate bounded deterministic candidates, verify every candidate, stage a
+complete verified batch, then promote it. A failed or ambiguous take is never
+published directly.
 
-## Terse dialogue guard
+## Candidate selection
 
-A one-to-five-word quoted reply is not synthesized in isolation. The analysis
-stage binds it to an immediately adjacent sentence from the supplied manuscript
-and records the source-sentence indexes and `adjacent_manuscript_context`
-strategy in `production/analysis.json`. This prevents a common TTS artefact:
-exaggerated terminal vowels or question contours caused by a tiny standalone
-request. The public harness does **not** invent character voices, splice
-phonemes, or fabricate a surrounding context. It uses only the real adjacent
-manuscript text, in order, in one verified take.
+Each semantic performance unit receives a small fixed set of pace variants. Two
+independent local Whisper passes, acoustic checks, and local MFA alignment decide
+whether a candidate may be selected. The selected file, source-unit hash, audio
+hash, transcripts, and checks are recorded in `production/verification.json`.
 
-If a final quoted reply has no adjacent sentence, analysis records it as a
-review case. Add a real neighbouring sentence where editorially appropriate or
-handle it as a deliberately reviewed exception; do not pad it with invented
-text.
+The checks reject clipping, empty audio, abnormal duration, unexpected silence,
+and unusually prolonged word timing. If a replacement is ambiguous but the
+manuscript unit is unchanged, the harness can retain the hash-verified previously
+accepted take. A changed source unit always requires a newly verified take.
 
-Professional releases must pass all automated gates. A failed or ambiguous take
-is not released: correct the source map, create a controlled replacement, and
-re-run verification. Names, numbers, dates, acronyms, foreign terms, negations,
-and units require exact treatment; do not waive them through approximate ASR
-similarity.
+## Terse dialogue
 
-The harness intentionally does not ship sound effects. Optional user-provided
-real-world recordings belong in a future sound-design integration and must carry
-license, provenance, placement, gain, and speech-clearance metadata.
+A one-to-five-word quoted reply is performed with real adjacent manuscript
+context, never as an isolated request or invented text. A final terse reply with
+no available context remains blocked for editorial review.
 
-## Forced alignment
+## Reviewed foreign phrases
 
-Professional verification runs local MFA alignment after both independent local
-Whisper transcriptions. Each generated take is converted to an isolated WAV/LAB
-pair and must produce a matching JSON alignment record. MFA is an evidence gate,
-not a model downloader: the starter profile uses locally installed English MFA
-models. A non-English project must explicitly name already installed local
-`mfa.dictionary` and `mfa.acoustic_model` values in `project.yaml`.
+A lexicon entry can represent a reviewed phrase rather than one word. Phrase
+entries require a language, IPA override, source, and `review_status: reviewed`.
+They can include `asr_equivalents` only for documented local-ASR spelling forms.
+Those forms are used solely to compare a specific phrase after synthesis; they do
+not change the spoken text or bypass exact checks on surrounding words.
+
+```json
+{
+  "published": "Example foreign phrase",
+  "spoken": "Example foreign phrase",
+  "phoneme_override": "...",
+  "language": "example-language",
+  "scope": "phrase",
+  "asr_equivalents": ["documented decoder spelling"],
+  "source": "Reliable pronunciation source",
+  "review_status": "reviewed"
+}
+```
+
+## Staging and promotion
+
+`stage` writes all verified deliverables and a hash-bound manifest beneath the
+project staging directory. `promote` checks that verification has not changed and
+then replaces the project deliverables atomically. `status --watch` refreshes both
+JSON lifecycle state and a readable Markdown progress view.
+
+The harness intentionally does not ship sound effects, music, cloned voices,
+cloud services, telemetry, synthetic scene audio, or automatic asset retrieval.

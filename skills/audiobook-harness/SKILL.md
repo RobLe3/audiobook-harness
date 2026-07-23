@@ -11,9 +11,9 @@ Use this skill when an author wants a local, verified audiobook.
 5. Review and approve every pronunciation-sensitive lexicon entry.
 6. Inspect `production/analysis.json`: terse quoted dialogue must use only
    `adjacent_manuscript_context`, never an invented context or isolated take.
-7. Run `generate`, then `verify`.
-8. If any take fails ASR, timing, pronunciation, clipping, or duration checks, revise the lexicon/context strategy and regenerate only that take. Do not publish a failed take.
-9. Run `release` only after verification passes.
+7. Run `generate`, then `verify`; use `retry` only for failed units.
+8. Treat a phrase-level ASR equivalence as valid only when reviewed IPA, source, exact phrase scope, and alignment evidence are present.
+9. Run `stage`, monitor `status --watch`, and run `promote` only after verification passes. Never copy staged media manually.
 
 ## Rules
 

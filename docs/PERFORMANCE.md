@@ -54,7 +54,7 @@ background for [M1](https://www.apple.com/newsroom/2020/11/apple-unleashes-m1/),
 
 1. Start with a representative, reviewed 1,000-word chapter.
 2. Record separate wall-clock times for `analyze`, `generate`, `verify`, and
-   `release` in your project notes.
+   `stage`, and `promote` in your project notes. Candidate verification is part of the measured cost.
 3. Multiply the **verify** time too; it is not optional overhead.
 4. Add 15–25% for chapters with new names, numbers, languages, or dialogue.
 5. Run sequentially for the first full-book batch. Parallel generation is an
