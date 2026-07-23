@@ -80,7 +80,11 @@ def assemble(project: Path) -> dict[str, Any]:
             if shutil.which("ffmpeg") is None:
                 raise RuntimeError("ffmpeg is required for release")
             __import__("subprocess").run(command, check=True)
-        outputs.append({"chapter": chapter, "files": [str(master.with_suffix(suffix).relative_to(project)) for suffix in (".flac", ".m4a", ".mp3")]})
-    report = {"version": 1, "outputs": outputs}
+        chapter_outputs = []
+        for suffix in (".flac", ".m4a", ".mp3"):
+            target = master.with_suffix(suffix)
+            chapter_outputs.append({"file": str(target.relative_to(project)), "sha256": sha256(target)})
+        outputs.append({"chapter": chapter, "files": chapter_outputs})
+    report = {"version": 2, "release_rule": "only verified, hash-recorded take files may be packaged", "outputs": outputs}
     write_json(paths["production"] / "release-manifest.json", report)
     return report
