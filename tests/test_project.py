@@ -22,6 +22,14 @@ def test_normalized_words_handles_typographic_apostrophes():
     ]
 
 
+def test_normalized_words_treats_hyphenated_compounds_as_closed_words():
+    assert normalized_words("start-up start‑up startup") == [
+        "startup",
+        "startup",
+        "startup",
+    ]
+
+
 def test_analysis_blocks_unreviewed_terms(tmp_path: Path):
     template = Path(__file__).parents[1] / "templates/project"
     project = tmp_path / "book"
@@ -67,7 +75,7 @@ def test_uncontextualised_final_terse_quote_requires_review():
     assert unit["requires_context_review"] is True
 
 
-def test_phrase_scoped_asr_equivalences_require_reviewed_phrase():
+def test_reviewed_term_and_phrase_asr_equivalences_require_evidence():
     from audiobook_harness.pronunciation import asr_equivalences
 
     lexicon = {
@@ -75,11 +83,52 @@ def test_phrase_scoped_asr_equivalences_require_reviewed_phrase():
             "review_status": "reviewed",
             "scope": "phrase",
             "spoken": "Example Phrase",
+            "phoneme_override": "e",
+            "source": "test source",
             "asr_equivalents": ["Example Frase"],
+        },
+        "ExampleName": {
+            "review_status": "reviewed",
+            "scope": "term",
+            "spoken": "Example Name",
+            "phoneme_override": "e",
+            "source": "test source",
+            "asr_equivalents": ["Example Naim"],
         },
         "Not Scoped": {"review_status": "reviewed", "asr_equivalents": ["Ignored"]},
     }
-    assert asr_equivalences(lexicon) == [("Example Frase", "Example Phrase")]
+    pairs = asr_equivalences(lexicon)
+    assert [(row["observed"], row["expected"], row["scope"]) for row in pairs] == [
+        ("Example Frase", "Example Phrase", "phrase"),
+        ("Example Naim", "Example Name", "term"),
+    ]
+
+
+def test_asr_equivalences_without_pronunciation_evidence_are_rejected(tmp_path: Path):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    (project / "source/chapter-01.txt").write_text("ExampleName arrived.")
+    analyze(project)
+    (project / "lexicon.json").write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "published": "ExampleName",
+                        "spoken": "Example Name",
+                        "phoneme_override": "e",
+                        "review_status": "reviewed",
+                        "scope": "term",
+                        "asr_equivalents": ["Example Naim"],
+                    }
+                ]
+            }
+        )
+    )
+    report = audit_lexicon(project)
+    assert not report["ok"]
+    assert report["invalid_asr_equivalences"] == ["ExampleName"]
 
 
 def test_retry_variants_extend_the_initial_bounded_set():

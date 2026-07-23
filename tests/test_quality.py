@@ -21,12 +21,31 @@ def test_alignment_evidence_requires_every_take(tmp_path):
     assert missing == ["two"]
 
 
-def test_phrase_equivalence_is_applied_before_exact_word_comparison():
-    from audiobook_harness.quality import _normalized_asr
+def test_term_equivalence_is_applied_with_audit_evidence():
+    from audiobook_harness.quality import _normalized_asr_with_evidence
 
-    assert _normalized_asr(
-        "Example Frase is ready", [("Example Frase", "Example Phrase")]
-    ) == ["example", "phrase", "is", "ready"]
+    words, applied = _normalized_asr_with_evidence(
+        "Example Frase is ready",
+        [
+            {
+                "observed": "Example Frase",
+                "expected": "Example Phrase",
+                "published": "Example Phrase",
+                "scope": "term",
+                "source": "test",
+            }
+        ],
+    )
+    assert words == ["example", "phrase", "is", "ready"]
+    assert applied == [
+        {
+            "observed": "Example Frase",
+            "expected": "Example Phrase",
+            "published": "Example Phrase",
+            "scope": "term",
+            "source": "test",
+        }
+    ]
 
 
 def test_acoustic_checks_reject_long_silence_and_clipping():

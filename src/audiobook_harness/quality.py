@@ -182,17 +182,29 @@ def run_mfa_alignment(
     return report
 
 
-def _normalized_asr(text: str, equivalences: list[tuple[str, str]]) -> list[str]:
+def _normalized_asr_with_evidence(
+    text: str, equivalences: list[dict[str, str]]
+) -> tuple[list[str], list[dict[str, str]]]:
     import re
 
-    for observed, expected in equivalences:
-        text = re.sub(
-            r"(?<!\w)" + re.escape(observed) + r"(?!\w)",
+    applied: list[dict[str, str]] = []
+    for equivalence in equivalences:
+        observed, expected = equivalence["observed"], equivalence["expected"]
+        pattern = r"(?<!\w)" + re.escape(observed) + r"(?!\w)"
+        text, substitutions = re.subn(
+            pattern,
             expected,
             text,
             flags=re.IGNORECASE,
         )
-    return normalized_words(text)
+        if substitutions:
+            applied.extend([equivalence] * substitutions)
+    return normalized_words(text), applied
+
+
+def _normalized_asr(text: str, equivalences: list[dict[str, str]]) -> list[str]:
+    """Compatibility helper for exact comparison tests and callers."""
+    return _normalized_asr_with_evidence(text, equivalences)[0]
 
 
 def _acoustic_checks(mono: np.ndarray, rate: int, words: int) -> list[str]:
@@ -261,8 +273,12 @@ def verify(project: Path, repo: Path) -> dict[str, Any]:
             audio, rate = sf.read(audio_path, dtype="float32")
             mono = np.mean(audio, axis=1) if getattr(audio, "ndim", 1) > 1 else audio
             expected = normalized_words(str(take["text"]))
-            first = _normalized_asr(_transcribe(primary, audio_path), equivalents)
-            second = _normalized_asr(_transcribe(secondary, audio_path), equivalents)
+            first, first_equivalences = _normalized_asr_with_evidence(
+                _transcribe(primary, audio_path), equivalents
+            )
+            second, second_equivalences = _normalized_asr_with_evidence(
+                _transcribe(secondary, audio_path), equivalents
+            )
             first_error = Levenshtein.distance(expected, first) / max(1, len(expected))
             second_error = Levenshtein.distance(expected, second) / max(
                 1, len(expected)
@@ -272,6 +288,8 @@ def verify(project: Path, repo: Path) -> dict[str, Any]:
                 **take,
                 "primary_text": " ".join(first),
                 "secondary_text": " ".join(second),
+                "primary_asr_equivalences": first_equivalences,
+                "secondary_asr_equivalences": second_equivalences,
                 "primary_wer": round(first_error, 4),
                 "secondary_wer": round(second_error, 4),
                 "duration_seconds": len(mono) / rate,
@@ -323,7 +341,7 @@ def verify(project: Path, repo: Path) -> dict[str, Any]:
         "forced_alignment": alignment,
         "takes": selected,
         "failures": failures,
-        "asr_phrase_equivalences": len(equivalents),
+        "asr_equivalences": len(equivalents),
     }
     write_json(paths["production"] / "verification.json", report)
     return report

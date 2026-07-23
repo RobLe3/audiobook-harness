@@ -23,21 +23,32 @@ A one-to-five-word quoted reply is performed with real adjacent manuscript
 context, never as an isolated request or invented text. A final terse reply with
 no available context remains blocked for editorial review.
 
-## Reviewed foreign phrases
+## Reviewed pronunciation equivalences
 
-A lexicon entry can represent a reviewed phrase rather than one word. Phrase
-entries require a language, IPA override, source, and `review_status: reviewed`.
-They can include `asr_equivalents` only for documented local-ASR spelling forms.
-Those forms are used solely to compare a specific phrase after synthesis; they do
-not change the spoken text or bypass exact checks on surrounding words.
+A reviewed lexicon entry can represent either a single protected term or a
+complete phrase. It may include `asr_equivalents` only for documented spellings
+emitted by the local ASR decoders. Every such entry requires an IPA override, a
+source, and `review_status: reviewed`.
+
+Equivalences are used solely after synthesis for transcript comparison. They do
+not change manuscript text, TTS input, IPA, forced alignment, acoustic checks,
+or exact checks on surrounding words. The verification record identifies which
+equivalence each ASR decoder used. A familiar-looking ASR spelling is never
+sufficient reason to add an alias: first confirm the intended pronunciation and
+both decoder outputs.
+
+Unicode dashes and closed/hyphenated compounds compare as the same word (for
+example, `start-up` and `startup`). A separated phrase such as `start up` is not
+merged automatically. Names, foreign terms, and multiword resegmentations must
+remain explicit project-local lexicon entries.
 
 ```json
 {
-  "published": "Example foreign phrase",
-  "spoken": "Example foreign phrase",
+  "published": "ExampleName",
+  "spoken": "Example Name",
   "phoneme_override": "...",
   "language": "example-language",
-  "scope": "phrase",
+  "scope": "term",
   "asr_equivalents": ["documented decoder spelling"],
   "source": "Reliable pronunciation source",
   "review_status": "reviewed"

@@ -5,6 +5,10 @@ It focuses on manuscript analysis, pronunciation control, contextual dialogue,
 Kokoro TTS, independent local speech verification, forced alignment, and reproducible
 M4A/MP3 delivery with staged promotion.
 
+Reviewed decoder-spelling equivalences are supported for protected names and
+phrases, but only as local transcript-comparison evidence. They never change the
+manuscript or spoken input; see the [quality contract](docs/QUALITY.md).
+
 It does **not** bundle manuscripts, cloned voices, music, SFX, synthetic sound
 generation, or cloud APIs.
 

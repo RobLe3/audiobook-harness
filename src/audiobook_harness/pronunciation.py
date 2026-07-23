@@ -43,29 +43,62 @@ def audit_lexicon(project: Path) -> dict[str, Any]:
         for term, row in lexicon.items()
         if row.get("review_status") == "reviewed" and not row.get("phoneme_override")
     ]
+    invalid_asr_equivalences: list[str] = []
+    for term, row in lexicon.items():
+        equivalents = row.get("asr_equivalents", [])
+        if not equivalents:
+            continue
+        valid = (
+            row.get("review_status") == "reviewed"
+            and row.get("scope", "term") in {"term", "phrase"}
+            and bool(row.get("phoneme_override"))
+            and bool(str(row.get("source", "")).strip())
+            and isinstance(equivalents, list)
+            and all(isinstance(value, str) and value.strip() for value in equivalents)
+        )
+        if not valid:
+            invalid_asr_equivalences.append(term)
     report = {
-        "ok": not missing and not unreviewed and not invalid,
+        "ok": not missing
+        and not unreviewed
+        and not invalid
+        and not invalid_asr_equivalences,
         "missing": missing,
         "unreviewed": unreviewed,
         "invalid": invalid,
+        "invalid_asr_equivalences": invalid_asr_equivalences,
     }
     write_json(paths["production"] / "pronunciation-audit.json", report)
     return report
 
 
-def asr_equivalences(lexicon: dict[str, dict[str, Any]]) -> list[tuple[str, str]]:
-    """Return reviewed, phrase-scoped ASR spellings without changing synthesis text."""
-    pairs: list[tuple[str, str]] = []
+def asr_equivalences(lexicon: dict[str, dict[str, Any]]) -> list[dict[str, str]]:
+    """Return reviewed term/phrase ASR spellings without changing TTS input.
+
+    An equivalence is evidence for decoder orthography only.  It remains
+    project-local and is usable only by an authenticated lexicon entry.
+    """
+    pairs: list[dict[str, str]] = []
     for published, row in lexicon.items():
         if (
             row.get("review_status") != "reviewed"
-            or row.get("scope", "term") != "phrase"
+            or row.get("scope", "term") not in {"term", "phrase"}
+            or not row.get("phoneme_override")
+            or not str(row.get("source", "")).strip()
         ):
             continue
         for spelling in row.get("asr_equivalents", []):
             if isinstance(spelling, str) and spelling.strip():
-                pairs.append((spelling, str(row.get("spoken", published))))
-    return pairs
+                pairs.append(
+                    {
+                        "observed": spelling.strip(),
+                        "expected": str(row.get("spoken", published)),
+                        "published": published,
+                        "scope": str(row.get("scope", "term")),
+                        "source": str(row["source"]),
+                    }
+                )
+    return sorted(pairs, key=lambda item: len(item["observed"]), reverse=True)
 
 
 def apply_to_phonemes(

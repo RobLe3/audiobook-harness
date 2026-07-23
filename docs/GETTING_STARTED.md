@@ -35,7 +35,9 @@ fallbacks.
 7. Review `lexicon.json`. For each identified sensitive term, add a
    `phoneme_override` and set `review_status` to `reviewed`. Do **not** guess a
    phonetic spelling: listen to a small test or use a reliable pronunciation
-   source.
+   source. If both local ASR decoders later use a different spelling for a
+   correctly reviewed name or phrase, add that spelling only as a documented
+   project-local `asr_equivalents` entry; it never changes the narration input.
 8. Run `generate`, then `verify`. Generation creates bounded deterministic candidates; verification selects only a candidate that passes two local Whisper decoders, acoustic checks, and per-take local MFA alignment.
 9. Run `stage`, monitor `status --watch`, then run `promote`. Promotion is blocked until the staged manifest still matches successful verification.
 

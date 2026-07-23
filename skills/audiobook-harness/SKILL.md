@@ -12,7 +12,7 @@ Use this skill when an author wants a local, verified audiobook.
 6. Inspect `production/analysis.json`: terse quoted dialogue must use only
    `adjacent_manuscript_context`, never an invented context or isolated take.
 7. Run `generate`, then `verify`; use `retry` only for failed units.
-8. Treat a phrase-level ASR equivalence as valid only when reviewed IPA, source, exact phrase scope, and alignment evidence are present.
+8. Treat a term- or phrase-level ASR equivalence as valid only when reviewed IPA, source, exact lexicon scope, dual-ASR evidence, and alignment evidence are present. Record it in the project lexicon; never add a broad correction for an ordinary word.
 9. Run `stage`, monitor `status --watch`, and run `promote` only after verification passes. Never copy staged media manually.
 
 ## Rules

@@ -39,9 +39,11 @@ def sha256(path: Path) -> str:
 
 
 def normalized_words(value: str) -> list[str]:
-    return re.findall(
-        r"[a-z0-9]+(?:['-][a-z0-9]+)?", value.casefold().replace("’", "'")
-    )
+    # A hyphen is an orthographic joiner, not a spoken word boundary.  Treat
+    # ASCII and typographic hyphens alike so `start-up` and `startup` compare
+    # identically without accepting the distinct verb phrase `start up`.
+    value = re.sub(r"[‐‑‒–—-]", "", value)
+    return re.findall(r"[a-z0-9]+(?:'[a-z0-9]+)?", value.casefold().replace("’", "'"))
 
 
 def sentence_units(value: str) -> list[str]:
