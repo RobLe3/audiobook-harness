@@ -41,6 +41,14 @@ If the protocol changes, the take is automatically regenerated and verified;
 stale contextual evidence cannot be silently retained. A final terse reply with
 no available context remains blocked for editorial review.
 
+The final release decision revalidates the selected take against the current
+contextual-performance evidence. It does not rely on an earlier lint annotation:
+if later candidate selection or repair resolution changes a take, the final
+contract checks the current source hash, selected audio hash, pace, and protocol
+again. This preserves strict quality controls while preventing an otherwise
+valid release from failing because an informational lint report was created
+before the final verified selection existed.
+
 ## Reviewed pronunciation equivalences
 
 A reviewed lexicon entry can represent either a single protected term or a
