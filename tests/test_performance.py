@@ -12,6 +12,7 @@ def test_auto_profile_reserves_capacity():
     assert profile.reserved_cpus >= 2
     assert profile.cpu_budget == 16 - profile.reserved_cpus
     assert profile.alignment_jobs == 6
+    assert profile.alignment_serial_fallback
     assert profile.asr_model_workers == 2
 
 

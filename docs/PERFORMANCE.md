@@ -73,9 +73,10 @@ ASR. `legacy` remains serial and is the compatibility/default profile.
 
 Profiles are scheduling metadata, not a quality setting: use a staged serial
 reference before enabling parallel work for a production batch, compare the
-selected candidates and alignment evidence, and fall back to serial if they
-differ. GPU, NPU, or cloud execution is not automatically accepted by this
-local CPU verification contract.
+selected candidates and alignment evidence, and fall back once to a clean serial
+alignment runtime only for transient worker/runtime failure. Semantic or quality
+failures are never retried as a performance fallback. GPU, NPU, or cloud
+execution is not automatically accepted by this local CPU verification contract.
 
 ## Safe repeat-run acceleration
 

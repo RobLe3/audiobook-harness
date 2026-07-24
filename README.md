@@ -45,8 +45,11 @@ read [setup](docs/SETUP.md), the [quality contract](docs/QUALITY.md),
 [Container smoke test](docs/SETUP.md#container-smoke-test).
 
 `performance --profile auto` displays a conservative local CPU budget. It
-reserves system capacity and may be used by qualifying alignment work, but it
-never weakens the quality contract or turns GPU/NPU use into release evidence.
+reserves system capacity and may be used by qualifying alignment work. If a
+parallel alignment worker fails for a transient runtime reason, the same work
+restarts once in a clean serial runtime; semantic and quality failures remain
+blocking. It never weakens the quality contract or turns GPU/NPU use into
+release evidence.
 
 ## Verify this checkout
 
