@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .project import project_paths, sha256, write_json
+from .context_protocol import candidate_protocol_error
 
 
 def audit_candidate_selection(
@@ -77,6 +78,10 @@ def audit_candidate_selection(
         checked.append(row)
         path = project / row["file"]
         expected_audio_sha = str(take.get("sha256"))
+        protocol_error = candidate_protocol_error(take)
+        if protocol_error:
+            errors.append({"rule": protocol_error, **row})
+            continue
         if not path.is_file():
             errors.append({"rule": "selected_audio_missing", **row})
             continue

@@ -61,7 +61,7 @@ A block is a safety feature, not an invitation to bypass a check.
 | --- | --- | --- |
 | `doctor` is not OK | A local prerequisite or pinned model is absent. | Run explicit setup or install the named prerequisite. |
 | Unresolved lexicon term | The harness cannot safely guess the pronunciation. | Review `lexicon.json`, then re-run `analyze`. |
-| ASR, acoustic, or alignment failure | No candidate is proven against the expected text. | Correct the lexicon or manuscript context, run `retry`, then verify again. |
+| ASR, acoustic, alignment, or contextual-protocol failure | No candidate is proven against the expected text and current release method. | Correct the lexicon or manuscript context, run `retry`, then verify again. |
 | Staging or promotion block | The batch is incomplete or its verification evidence changed. | Re-run verification and stage a complete batch; do not copy files manually. |
 | Non-English MFA profile missing | MFA would have to guess/download a model. | Install a local model deliberately and name it in `project.yaml`. |
 

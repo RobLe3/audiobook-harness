@@ -56,3 +56,24 @@ def test_changed_candidate_manifest_is_rejected(tmp_path: Path):
     assert any(
         row["rule"] == "candidate_manifest_hash_mismatch" for row in report["errors"]
     )
+
+
+def test_stale_contextual_protocol_is_rejected_before_packaging(tmp_path: Path):
+    project = _project_with_selection(tmp_path)
+    manifest = project / "production/candidates.json"
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["candidates"][0].update(
+        {
+            "contains_terse_dialogue": True,
+            "context_strategy": "adjacent_manuscript_context",
+            "context_protocol": "historical_context_protocol",
+        }
+    )
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    verification = json.loads((project / "production/verification.json").read_text())
+    verification["candidate_manifest_sha256"] = sha256(manifest)
+    verification["takes"][0].update(payload["candidates"][0])
+    (project / "production/verification.json").write_text(json.dumps(verification))
+    report = audit_candidate_selection(project)
+    assert report["ok"] is False
+    assert any(row["rule"] == "stale_contextual_performance_protocol" for row in report["errors"])

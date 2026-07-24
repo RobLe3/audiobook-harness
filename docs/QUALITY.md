@@ -35,7 +35,10 @@ current manifest proves that its source unit is unchanged.
 ## Terse dialogue
 
 A one-to-five-word quoted reply is performed with real adjacent manuscript
-context, never as an isolated request or invented text. A final terse reply with
+context, never as an isolated request or invented text. The candidate records a
+versioned contextual-performance protocol together with its source-unit hash.
+If the protocol changes, the take is automatically regenerated and verified;
+stale contextual evidence cannot be silently retained. A final terse reply with
 no available context remains blocked for editorial review.
 
 ## Reviewed pronunciation equivalences

@@ -42,3 +42,15 @@ read [setup](docs/SETUP.md), the [quality contract](docs/QUALITY.md),
 [performance planning](docs/PERFORMANCE.md), [workflow architecture](docs/ARCHITECTURE.md), and the agent
 [skill](skills/audiobook-harness/SKILL.md). A local, model-free Linux onboarding check is documented in
 [Container smoke test](docs/SETUP.md#container-smoke-test).
+
+## Verify this checkout
+
+Run the repository checks before starting a book:
+
+```bash
+scripts/test-harness.sh
+```
+
+It runs the unit tests and linting with the local virtual environment. If the
+already-built local smoke image is present, it also runs its model-free offline
+container check; it never pulls an image or downloads a model.

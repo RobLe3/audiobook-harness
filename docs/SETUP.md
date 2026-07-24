@@ -48,6 +48,11 @@ A full generation/verification run additionally needs the explicit, pinned model
 download and a locally installed MFA profile; it is intentionally not hidden in
 the smoke image.
 
+The smoke image intentionally reports that narration and verification models are
+absent. That is expected: it proves clean package installation and manuscript
+analysis without accepting a model download or copying private media into the
+image.
+
 ## Offline verification container
 
 The verification image contains the harness and system tools, but no manuscript,

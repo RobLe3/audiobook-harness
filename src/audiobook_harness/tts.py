@@ -13,6 +13,7 @@ import soundfile as sf
 from .project import load_project, project_paths, sha256, write_json
 from .pronunciation import apply_to_phonemes, audit_lexicon, load_reviewed_lexicon
 from .selection_integrity import audit_candidate_selection
+from .context_protocol import protocol_for_unit
 
 SAMPLE_RATE = 24_000
 VARIANTS = (("baseline", 0.0), ("slower", -0.01), ("faster", 0.01))
@@ -28,8 +29,11 @@ def _source_hash(unit: dict[str, Any]) -> str:
     return hashlib.sha256(
         json.dumps(
             {
+                **{
                 k: unit.get(k)
                 for k in ("id", "text", "source_sentence_indexes", "context_strategy")
+                },
+                "context_protocol": protocol_for_unit(unit),
             },
             sort_keys=True,
         ).encode()
@@ -79,6 +83,7 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
                 lambda value: engine.tokenizer.phonemize(value, language),
             )
             source_hash = _source_hash(unit)
+            context_protocol = protocol_for_unit(unit)
             for name, delta in RETRY_VARIANTS if failed_only else VARIANTS:
                 actual_speed = max(0.85, min(1.05, speed + delta))
                 audio, rate = engine.create(
@@ -99,6 +104,7 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
                             "candidate": name,
                             "phonemes": phonemes,
                             "source_hash": source_hash,
+                            "context_protocol": context_protocol,
                             "voice": voice,
                             "speed": actual_speed,
                         },
@@ -153,10 +159,10 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
             row for row in existing["candidates"] if row["id"] not in failed
         ] + candidates
     report = {
-        "version": 3,
+        "version": 4,
         "offline": True,
         "sample_rate": SAMPLE_RATE,
-        "candidate_policy": "bounded deterministic pace variants; retry adds two controlled pace alternatives; only verified candidates may be selected",
+        "candidate_policy": "bounded deterministic pace variants; retry adds two controlled pace alternatives; contextual terse dialogue is bound to a versioned adjacent-manuscript performance protocol; only verified candidates may be selected",
         "candidates": candidates,
     }
     write_json(paths["production"] / "candidates.json", report)
