@@ -1,0 +1,9 @@
+SERIES  ::  FINAL AUDIT + PROMOTION
+
+  chapter 01  ████████   chapter 02  ████████   ...
+  chapter 08  ████████   chapter 09  ████████
+
+  staged set -> exact-file audit -> continuous edition -> promote
+
+No mixed baseline: the canonical release changes only after every
+chapter and every series-level check has passed.

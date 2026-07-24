@@ -1,8 +1,12 @@
-05  REJECT OR APPROVE
+CHAPTER  ::  STAGE 5 / 8
 
-  mismatch / malformed pronunciation / unsafe short reply
-       |
-       +--> revise lexicon or real-manuscript context
-       `--> regenerate ONLY the affected take
+  [█████···]  pre-mix release contract
 
-  approved take -> immutable hash record
+  pronunciation map    pause + energy maps    cue-sheet hashes
+           \                 |                 /
+            \----------------+----------------/
+                             |
+                             v
+                   one coherent release contract
+
+Stale evidence or a changed cue blocks the chapter here.

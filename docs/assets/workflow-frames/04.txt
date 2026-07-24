@@ -1,9 +1,13 @@
-03  GENERATE
+CHAPTER  ::  STAGE 3 / 8
 
-  semantic performance unit
-        |
-        v
-  Kokoro (fixed voice + speed + local model)
-        |
-        v
-  lossless take + phoneme + hash evidence
+  [███·····]  prove candidates, then reassemble
+
+  candidate A / B / contextual repair
+                |
+                v
+  exact target only?  no leaked neighbouring words?
+                |
+                v
+  select one hash-bound take for the cue sheet
+
+Only demonstrated repairs replace an approved predecessor.

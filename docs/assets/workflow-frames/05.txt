@@ -1,8 +1,12 @@
-04  VERIFY EACH TAKE
+CHAPTER  ::  STAGE 4 / 8
 
-  Whisper A  ----\
-                 +--> compare expected spoken text
-  Whisper B  ----/     duration / peak / silence checks
-                         |
-                         v
-                    local MFA alignment
+  [████····]  text, timing and short-dialogue QA
+
+  Whisper A  -----\
+                    +--> expected spoken text
+  Whisper B  -----/      duration / silence / peak checks
+                            |
+                            v
+                     local MFA word + phone alignment
+
+Short turns use real manuscript context, then target-only proof.

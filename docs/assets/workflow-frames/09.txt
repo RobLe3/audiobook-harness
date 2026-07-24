@@ -1,0 +1,12 @@
+CHAPTER  ::  STAGE 8 / 8
+
+  [████████]  package and stage verified deliverables
+
+  chapter.m4a     chapter.mp3     release-manifest.json
+       |                |                  |
+       `----------------+------------------'
+                        |
+                        v
+                 isolated staging directory
+
+A staged chapter is ready for the series audit, not yet promotion.

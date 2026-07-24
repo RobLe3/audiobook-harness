@@ -1,7 +1,13 @@
-02  REVIEW THE LEXICON
+CHAPTER  ::  STAGE 2 / 8
 
-  Renaud     -> reviewed IPA / source
-  AC/DC      -> readable spoken form
-  2044       -> normalized spoken number
+  [██······]  bounded narration synthesis
 
-  unresolved term?  ->  STOP BEFORE TTS
+  semantic performance unit
+             |
+             v
+  Kokoro + fixed voice, pace and pronunciation plan
+             |
+             v
+  lossless take + text + phoneme + hash evidence
+
+Generate small units; never trust one long TTS request.

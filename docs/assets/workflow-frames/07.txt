@@ -1,9 +1,10 @@
-06  RELEASE
+CHAPTER  ::  STAGE 6 / 8
 
-  verified takes only
-       |
-       v
-  lossless FLAC + M4A + MP3
-       |
-       v
-  release manifest with output hashes
+  [██████··]  build the local master
+
+  approved narration  +  approved optional music / ambience
+                         |
+                         v
+  lossless master  ->  compact M4A + MP3 deliverables
+
+Audio is assembled only after the narration has passed its gates.

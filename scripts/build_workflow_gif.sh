@@ -25,6 +25,6 @@ for frame in "$FRAMES"/*.txt; do
     -strip "$png"
   index=$((index + 1))
 done
-magick -delay 105 -loop 0 "$BUILD"/*.png -layers Optimize "$OUT"
+magick -delay 180 -loop 0 "$BUILD"/*.png -layers Optimize "$OUT"
 rm -rf "$BUILD"
 printf 'Created %s\n' "$OUT"

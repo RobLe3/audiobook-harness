@@ -1,10 +1,11 @@
-01  ANALYSE
+CHAPTER  ::  STAGE 1 / 8
+
+  [█·······]  preflight + manuscript analysis
 
   manuscript
       |
-      +-- names / foreign terms / acronyms / numbers
-      |
-      +-- sentence + pause boundaries
-      |
-      `-- short quoted dialogue
-            -> real adjacent manuscript context
+      +-- sentence, pause and breath structure
+      +-- names, acronyms, numbers and foreign terms
+      `-- short quoted turns that need real context
+
+Output: a chapter plan before any narration is created.

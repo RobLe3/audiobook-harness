@@ -1,8 +1,9 @@
-AUDIOBOOK HARNESS :: LOCAL QUALITY LOOP
+AUDIOBOOK HARNESS :: CHAPTER QUALITY PIPELINE
 
-[ manuscript.txt ]
-       |
-       v
-  ANALYSE  ->  pronunciation + context map
+A chapter moves forward only when its current stage passes.
 
-No cloud fallback. No generated SFX.
+  [········]  0/8 stages complete
+
+  local manuscript  ->  verified deliverables
+
+No cloud fallback. No direct publishing from TTS.

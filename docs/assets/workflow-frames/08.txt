@@ -1,0 +1,9 @@
+CHAPTER  ::  STAGE 7 / 8
+
+  [███████·]  post-mix quality + regression verification
+
+  final transcription  ->  manuscript comparison
+  joins + loudness      ->  acoustic integrity
+  changed cues          ->  hash-bound non-regression check
+
+Ambiguous changes keep the approved predecessor; failures stop release.

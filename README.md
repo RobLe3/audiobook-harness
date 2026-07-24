@@ -14,9 +14,11 @@ generation, or cloud APIs.
 
 ![Animated local workflow](docs/assets/audiobook-harness-workflow.gif)
 
-The animation is a local ASCII-style overview. It shows the release contract,
-not a benchmark: the actual time depends on manuscript length, reviewed
-vocabulary, hardware, and the number of rejected takes.
+The animation is a local ASCII-style production walkthrough. It mirrors the
+eight chapter stages shown by `audiobook-harness status`, from analysis through
+staging and the final series audit. It shows the release contract, not a
+benchmark: actual time depends on manuscript length, reviewed vocabulary,
+hardware, and the number of rejected takes. See the [production walkthrough](docs/PRODUCTION_WALKTHROUGH.md) for the corresponding stage contract.
 
 ## Quick start
 
