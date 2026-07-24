@@ -8,6 +8,7 @@ from pathlib import Path
 from . import __version__
 from .analysis import analyze
 from .project import scaffold
+from .performance import resolve_profile
 from .quality import verify
 from .status import render_status, watch, write_run_status
 from .tts import assemble, generate, promote, stage
@@ -91,6 +92,8 @@ def main() -> None:
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor")
+    performance = sub.add_parser("performance")
+    performance.add_argument("--profile", choices=("legacy", "auto"), default="legacy")
     new = sub.add_parser("new-project")
     new.add_argument("directory", type=Path)
     for name in (
@@ -112,6 +115,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "doctor":
         emit(doctor(REPO))
+        return
+    if args.command == "performance":
+        emit({"ok": True, "profile": resolve_profile(args.profile).as_dict()})
         return
     if args.command == "new-project":
         scaffold(args.directory.resolve(), REPO / "templates/project")

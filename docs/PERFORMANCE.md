@@ -64,6 +64,19 @@ The M-series generation is a useful purchase hint, not a quality setting. A
 complete verified output on a slower Mac is preferable to a fast but unverified
 release.
 
+## Conservative CPU profiles
+
+Run `audiobook-harness performance --profile auto` to inspect the machine-local
+budget before a batch. The auto profile reserves operating-system capacity,
+caps alignment workers, and exposes future bounded budgets for synthesis and
+ASR. `legacy` remains serial and is the compatibility/default profile.
+
+Profiles are scheduling metadata, not a quality setting: use a staged serial
+reference before enabling parallel work for a production batch, compare the
+selected candidates and alignment evidence, and fall back to serial if they
+differ. GPU, NPU, or cloud execution is not automatically accepted by this
+local CPU verification contract.
+
 ## Safe repeat-run acceleration
 
 The verifier uses the CPU as its release authority. It keeps a local,

@@ -25,6 +25,7 @@ hardware, and the number of rejected takes. See the [production walkthrough](doc
 ```bash
 python scripts/setup.py --interactive
 .venv/bin/audiobook-harness doctor
+.venv/bin/audiobook-harness performance --profile auto
 .venv/bin/audiobook-harness new-project projects/my-book
 # place your licensed manuscript text at projects/my-book/source/chapter-01.txt
 .venv/bin/audiobook-harness analyze projects/my-book
@@ -42,6 +43,10 @@ read [setup](docs/SETUP.md), the [quality contract](docs/QUALITY.md),
 [performance planning](docs/PERFORMANCE.md), [workflow architecture](docs/ARCHITECTURE.md), and the agent
 [skill](skills/audiobook-harness/SKILL.md). A local, model-free Linux onboarding check is documented in
 [Container smoke test](docs/SETUP.md#container-smoke-test).
+
+`performance --profile auto` displays a conservative local CPU budget. It
+reserves system capacity and may be used by qualifying alignment work, but it
+never weakens the quality contract or turns GPU/NPU use into release evidence.
 
 ## Verify this checkout
 
