@@ -11,11 +11,18 @@ Each semantic performance unit receives a small fixed set of pace variants. Two
 independent local Whisper passes, acoustic checks, and local MFA alignment decide
 whether a candidate may be selected. The selected file, source-unit hash, audio
 hash, transcripts, and checks are recorded in `production/verification.json`.
+Selection is also bound to the hash of `production/candidates.json`; before
+packaging, the harness confirms that the selected audio still has the recorded
+bytes and still corresponds to a current candidate-manifest entry. Candidate
+files use content-addressed names, so a later retry cannot silently replace a
+waveform that was already verified.
 
 The checks reject clipping, empty audio, abnormal duration, unexpected silence,
 and unusually prolonged word timing. If a replacement is ambiguous but the
 manuscript unit is unchanged, the harness can retain the hash-verified previously
-accepted take. A changed source unit always requires a newly verified take.
+accepted take. A changed source unit always requires a newly verified take. A
+retained predecessor is permitted only when its audio hash is intact and the
+current manifest proves that its source unit is unchanged.
 
 ## Terse dialogue
 

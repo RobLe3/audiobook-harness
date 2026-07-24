@@ -12,6 +12,7 @@ from rapidfuzz.distance import Levenshtein
 
 from .project import load_project, normalized_words, project_paths, sha256, write_json
 from .pronunciation import asr_equivalences, audit_lexicon, load_reviewed_lexicon
+from .selection_integrity import audit_candidate_selection
 
 
 def _transcribe(model: Any, audio: Path) -> str:
@@ -238,9 +239,8 @@ def verify(project: Path, repo: Path) -> dict[str, Any]:
 
     paths = project_paths(project)
     lexicon_report = audit_lexicon(project)
-    candidates = json.loads((paths["production"] / "candidates.json").read_text())[
-        "candidates"
-    ]
+    candidates_path = paths["production"] / "candidates.json"
+    candidates = json.loads(candidates_path.read_text())["candidates"]
     primary_path, secondary_path = (
         repo / ".tools/whisper/models/large-v3-turbo.pt",
         repo / ".tools/whisper/models/base.pt",
@@ -334,14 +334,17 @@ def verify(project: Path, repo: Path) -> dict[str, Any]:
         else {"ok": False, "failure": "no verified takes"}
     )
     report = {
-        "version": 3,
+        "version": 4,
         "ok": lexicon_report["ok"] and not failures and alignment["ok"],
         "candidate_policy": "dual ASR, acoustic checks, alignment, and hash-bound selection",
+        "candidate_manifest_sha256": sha256(candidates_path),
         "lexicon": lexicon_report,
         "forced_alignment": alignment,
         "takes": selected,
         "failures": failures,
         "asr_equivalences": len(equivalents),
     }
+    write_json(paths["production"] / "verification.json", report)
+    report["candidate_selection_integrity"] = audit_candidate_selection(project, report)
     write_json(paths["production"] / "verification.json", report)
     return report

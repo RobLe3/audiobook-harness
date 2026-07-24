@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ import soundfile as sf
 
 from .project import load_project, project_paths, sha256, write_json
 from .pronunciation import apply_to_phonemes, audit_lexicon, load_reviewed_lexicon
+from .selection_integrity import audit_candidate_selection
 
 SAMPLE_RATE = 24_000
 VARIANTS = (("baseline", 0.0), ("slower", -0.01), ("faster", 0.01))
@@ -23,8 +25,6 @@ def model_paths(repo: Path) -> tuple[Path, Path]:
 
 
 def _source_hash(unit: dict[str, Any]) -> str:
-    import hashlib
-
     return hashlib.sha256(
         json.dumps(
             {
@@ -93,12 +93,24 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
                     raise RuntimeError(
                         f"Expected {SAMPLE_RATE} Hz output, received {rate}"
                     )
+                candidate_identity = hashlib.sha256(
+                    json.dumps(
+                        {
+                            "candidate": name,
+                            "phonemes": phonemes,
+                            "source_hash": source_hash,
+                            "voice": voice,
+                            "speed": actual_speed,
+                        },
+                        sort_keys=True,
+                    ).encode("utf-8")
+                ).hexdigest()
                 target = (
                     paths["assets"]
                     / "candidates"
                     / chapter["id"]
                     / unit_id
-                    / f"{name}.flac"
+                    / f"{name}-{candidate_identity[:16]}.flac"
                 )
                 target.parent.mkdir(parents=True, exist_ok=True)
                 sf.write(
@@ -141,7 +153,7 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
             row for row in existing["candidates"] if row["id"] not in failed
         ] + candidates
     report = {
-        "version": 2,
+        "version": 3,
         "offline": True,
         "sample_rate": SAMPLE_RATE,
         "candidate_policy": "bounded deterministic pace variants; retry adds two controlled pace alternatives; only verified candidates may be selected",
@@ -213,6 +225,10 @@ def stage(
     verification = json.loads((paths["production"] / "verification.json").read_text())
     if not verification.get("ok"):
         raise RuntimeError("Cannot package: verification is not successful")
+    integrity = audit_candidate_selection(project, verification)
+    if not integrity["ok"]:
+        rules = ", ".join(str(row["rule"]) for row in integrity["errors"])
+        raise RuntimeError(f"Cannot package: candidate selection integrity failed: {rules}")
     root = (output or project / "staging").resolve()
     shutil.rmtree(root, ignore_errors=True)
     root.mkdir(parents=True, exist_ok=True)
@@ -221,6 +237,9 @@ def stage(
         "version": 1,
         "state": "direct_release" if direct else "staged",
         "verification_sha256": sha256(paths["production"] / "verification.json"),
+        "candidate_selection_integrity_sha256": sha256(
+            paths["production"] / "candidate-selection-integrity.json"
+        ),
         "outputs": outputs,
     }
     write_json(root / "stage-manifest.json", report)
