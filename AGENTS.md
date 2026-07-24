@@ -13,6 +13,11 @@ Do not publish audio directly from TTS. Generate bounded semantic takes, verify
 with two local ASR passes and MFA, and reject or retry failures. Keep names,
 acronyms, foreign terms, numbers, and dates in the pronunciation lexicon.
 
+One-to-five-word quoted dialogue must be generated as one performance with its
+real adjacent manuscript context. Contextual candidates are version-bound; a
+stale context protocol requires regeneration and verification, never a silent
+reuse. Run `scripts/test-harness.sh` before changing or publishing the harness.
+
 The harness is local-first. `scripts/setup.py` is the only script allowed to
 install dependencies or download model weights, and it requires explicit opt-in.
 After setup, production uses `--offline` by default. Do not add telemetry, cloud
