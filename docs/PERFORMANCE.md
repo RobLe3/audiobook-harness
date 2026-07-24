@@ -63,3 +63,18 @@ background for [M1](https://www.apple.com/newsroom/2020/11/apple-unleashes-m1/),
 The M-series generation is a useful purchase hint, not a quality setting. A
 complete verified output on a slower Mac is preferable to a fast but unverified
 release.
+
+## Safe repeat-run acceleration
+
+The verifier uses the CPU as its release authority. It keeps a local,
+content-addressed ASR evidence cache in `production/asr-evidence-cache.json`.
+On a retry, reviewed audio is re-used only if the waveform hash, model
+checkpoint hash, decode profile and CPU device all still match. This usually
+makes a retry much quicker without replacing any quality gate. A cache miss
+always performs both local ASR passes again.
+
+The command output records cache hits and fresh decodes in
+`production/verification.json`. Use those measurements, rather than a guessed
+progress estimate, to plan the next batch. Hardware experiments may be useful
+for engineering, but they must not replace the configured CPU verification
+authority for release selection.

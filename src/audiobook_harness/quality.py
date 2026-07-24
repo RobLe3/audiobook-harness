@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import gc
 import shutil
 import subprocess
 from pathlib import Path
@@ -13,11 +14,65 @@ from rapidfuzz.distance import Levenshtein
 from .project import load_project, normalized_words, project_paths, sha256, write_json
 from .pronunciation import asr_equivalences, audit_lexicon, load_reviewed_lexicon
 from .selection_integrity import audit_candidate_selection
+from .asr_cache import evidence_key, load as load_asr_cache, save as save_asr_cache
 
 
-def _transcribe(model: Any, audio: Path) -> str:
-    result = model.transcribe(str(audio), fp16=False, verbose=False)
-    return str(result.get("text", "")).strip()
+ASR_DEVICE = "cpu"
+PRIMARY_DECODE = {"fp16": False, "verbose": False, "word_timestamps": False}
+SECONDARY_DECODE = {"fp16": False, "verbose": False, "word_timestamps": False}
+
+
+def _cached_transcripts(
+    whisper: Any,
+    *,
+    project: Path,
+    candidates: list[dict[str, Any]],
+    checkpoint: Path,
+    decode: dict[str, object],
+    cache: dict[str, Any],
+) -> tuple[dict[str, str], int, int]:
+    """Return local CPU transcripts, loading a model only when evidence misses."""
+    model_sha256 = sha256(checkpoint)
+    entries = cache["entries"]
+    texts: dict[str, str] = {}
+    pending: list[tuple[dict[str, Any], str, str]] = []
+    hits = 0
+    for take in candidates:
+        relative = str(take["file"])
+        audio_path = project / relative
+        audio_sha256 = str(take.get("sha256") or sha256(audio_path))
+        key = evidence_key(
+            audio_sha256=audio_sha256,
+            model_sha256=model_sha256,
+            decode=decode,
+            device=ASR_DEVICE,
+        )
+        cached = entries.get(key)
+        if isinstance(cached, dict) and isinstance(cached.get("text"), str):
+            texts[relative] = str(cached["text"])
+            hits += 1
+        else:
+            pending.append((take, audio_sha256, key))
+    if not pending:
+        return texts, hits, 0
+    model = whisper.load_model(str(checkpoint), device=ASR_DEVICE)
+    for take, audio_sha256, key in pending:
+        relative = str(take["file"])
+        result = model.transcribe(str(project / relative), **decode)
+        text = str(result.get("text", "")).strip()
+        texts[relative] = text
+        entries[key] = {
+            "audio_sha256": audio_sha256,
+            "model_sha256": model_sha256,
+            "decode": decode,
+            "device": ASR_DEVICE,
+            "text": text,
+        }
+        save_asr_cache(project / "production" / "asr-evidence-cache.json", cache)
+    misses = len(pending)
+    del model
+    gc.collect()
+    return texts, hits, misses
 
 
 def _mfa_command(repo: Path) -> str | None:
@@ -249,10 +304,25 @@ def verify(project: Path, repo: Path) -> dict[str, Any]:
         raise FileNotFoundError(
             "Whisper primary/secondary models missing; run explicit model setup"
         )
-    primary, secondary = (
-        whisper.load_model(str(primary_path)),
-        whisper.load_model(str(secondary_path)),
+    asr_cache_path = paths["production"] / "asr-evidence-cache.json"
+    asr_cache = load_asr_cache(asr_cache_path)
+    primary_texts, primary_hits, primary_misses = _cached_transcripts(
+        whisper,
+        project=project,
+        candidates=candidates,
+        checkpoint=primary_path,
+        decode=PRIMARY_DECODE,
+        cache=asr_cache,
     )
+    secondary_texts, secondary_hits, secondary_misses = _cached_transcripts(
+        whisper,
+        project=project,
+        candidates=candidates,
+        checkpoint=secondary_path,
+        decode=SECONDARY_DECODE,
+        cache=asr_cache,
+    )
+    save_asr_cache(asr_cache_path, asr_cache)
     lexicon = load_reviewed_lexicon(project)
     equivalents = asr_equivalences(lexicon)
     old = (
@@ -274,10 +344,10 @@ def verify(project: Path, repo: Path) -> dict[str, Any]:
             mono = np.mean(audio, axis=1) if getattr(audio, "ndim", 1) > 1 else audio
             expected = normalized_words(str(take["text"]))
             first, first_equivalences = _normalized_asr_with_evidence(
-                _transcribe(primary, audio_path), equivalents
+                primary_texts[str(take["file"])], equivalents
             )
             second, second_equivalences = _normalized_asr_with_evidence(
-                _transcribe(secondary, audio_path), equivalents
+                secondary_texts[str(take["file"])], equivalents
             )
             first_error = Levenshtein.distance(expected, first) / max(1, len(expected))
             second_error = Levenshtein.distance(expected, second) / max(
@@ -334,7 +404,7 @@ def verify(project: Path, repo: Path) -> dict[str, Any]:
         else {"ok": False, "failure": "no verified takes"}
     )
     report = {
-        "version": 4,
+        "version": 5,
         "ok": lexicon_report["ok"] and not failures and alignment["ok"],
         "candidate_policy": "dual ASR, acoustic checks, alignment, and hash-bound selection",
         "candidate_manifest_sha256": sha256(candidates_path),
@@ -343,6 +413,15 @@ def verify(project: Path, repo: Path) -> dict[str, Any]:
         "takes": selected,
         "failures": failures,
         "asr_equivalences": len(equivalents),
+        "asr_performance": {
+            "device": ASR_DEVICE,
+            "word_timestamps": False,
+            "cache": str(asr_cache_path.relative_to(project)),
+            "primary_cache_hits": primary_hits,
+            "secondary_cache_hits": secondary_hits,
+            "primary_new_decodes": primary_misses,
+            "secondary_new_decodes": secondary_misses,
+        },
     }
     write_json(paths["production"] / "verification.json", report)
     report["candidate_selection_integrity"] = audit_candidate_selection(project, report)

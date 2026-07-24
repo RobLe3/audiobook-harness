@@ -17,6 +17,14 @@ bytes and still corresponds to a current candidate-manifest entry. Candidate
 files use content-addressed names, so a later retry cannot silently replace a
 waveform that was already verified.
 
+ASR evidence is cached locally only when the complete evidence identity matches:
+audio hash, Whisper checkpoint hash, decode settings and CPU device. The cache
+does not accept a take by itself; it only avoids repeating an identical local
+decode. Any changed waveform, model or decode setting receives a fresh pair of
+unprompted ASR checks. Candidate verification deliberately disables word
+timestamps because this text-comparison stage does not consume them; timestamp
+and forced-alignment gates remain separate release checks.
+
 The checks reject clipping, empty audio, abnormal duration, unexpected silence,
 and unusually prolonged word timing. If a replacement is ambiguous but the
 manuscript unit is unchanged, the harness can retain the hash-verified previously

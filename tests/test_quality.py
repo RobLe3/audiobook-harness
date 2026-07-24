@@ -57,3 +57,23 @@ def test_acoustic_checks_reject_long_silence_and_clipping():
     failures = _acoustic_checks(audio, 24_000, 4)
     assert "clipping" in failures
     assert "unexpected_silence" in failures
+
+
+def test_asr_cache_key_changes_with_every_evidence_input():
+    from audiobook_harness.asr_cache import evidence_key
+
+    base = evidence_key(
+        audio_sha256="audio", model_sha256="model", decode={"beam_size": 5}, device="cpu"
+    )
+    assert base != evidence_key(
+        audio_sha256="other", model_sha256="model", decode={"beam_size": 5}, device="cpu"
+    )
+    assert base != evidence_key(
+        audio_sha256="audio", model_sha256="other", decode={"beam_size": 5}, device="cpu"
+    )
+    assert base != evidence_key(
+        audio_sha256="audio", model_sha256="model", decode={"beam_size": 1}, device="cpu"
+    )
+    assert base != evidence_key(
+        audio_sha256="audio", model_sha256="model", decode={"beam_size": 5}, device="mps"
+    )
