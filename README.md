@@ -14,11 +14,7 @@ generation, or cloud APIs.
 
 ![Animated local workflow](docs/assets/audiobook-harness-workflow.gif)
 
-The animation is a local ASCII-style production walkthrough. It mirrors the
-eight chapter stages shown by `audiobook-harness status`, from analysis through
-staging and the final series audit. It shows the release contract, not a
-benchmark: actual time depends on manuscript length, reviewed vocabulary,
-hardware, and the number of rejected takes. See the [production walkthrough](docs/PRODUCTION_WALKTHROUGH.md) for the corresponding stage contract.
+The animation is a local ASCII-style production walkthrough. It illustrates eight quality checkpoints. The command-line status view intentionally groups them into five clear milestones: analyse, generate, verify, stage and promote. It shows a release contract, not a benchmark: actual time depends on manuscript length, reviewed vocabulary, hardware and rejected takes. See the [production walkthrough](docs/PRODUCTION_WALKTHROUGH.md) for both a plain-language and expert view.
 
 ## Quick start
 
@@ -30,7 +26,7 @@ python scripts/setup.py --interactive
 # place your licensed manuscript text at projects/my-book/source/chapter-01.txt
 .venv/bin/audiobook-harness analyze projects/my-book
 .venv/bin/audiobook-harness generate projects/my-book
-.venv/bin/audiobook-harness verify projects/my-book
+.venv/bin/audiobook-harness verify projects/my-book --performance-profile auto
 .venv/bin/audiobook-harness stage projects/my-book
 .venv/bin/audiobook-harness status projects/my-book --watch
 .venv/bin/audiobook-harness promote projects/my-book
@@ -38,18 +34,20 @@ python scripts/setup.py --interactive
 
 On Windows, use `.venv\\Scripts\\audiobook-harness.exe` instead.
 
-Start with the plain-language [first-book guide](docs/GETTING_STARTED.md), then
+## Choose your depth
+
+**First audiobook:** follow the plain-language [first-book guide](docs/GETTING_STARTED.md), then
 read [setup](docs/SETUP.md), the [quality contract](docs/QUALITY.md),
 [performance planning](docs/PERFORMANCE.md), [workflow architecture](docs/ARCHITECTURE.md), and the agent
 [skill](skills/audiobook-harness/SKILL.md). A local, model-free Linux onboarding check is documented in
 [Container smoke test](docs/SETUP.md#container-smoke-test).
 
-`performance --profile auto` displays a conservative local CPU budget. It
-reserves system capacity and may be used by qualifying alignment work. If a
-parallel alignment worker fails for a transient runtime reason, the same work
-restarts once in a clean serial runtime; semantic and quality failures remain
-blocking. It never weakens the quality contract or turns GPU/NPU use into
-release evidence.
+`performance --profile auto` displays a conservative local CPU budget. Pass
+`--performance-profile auto` to `verify` to use it for forced alignment. If a
+parallel alignment worker fails for a recognised transient runtime reason, the
+same work restarts once in a clean serial runtime; dictionary, corpus, semantic
+and quality failures remain blocking. It never weakens the quality contract or
+turns GPU/NPU use into release evidence.
 
 ## Verify this checkout
 

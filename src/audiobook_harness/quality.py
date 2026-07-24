@@ -15,6 +15,7 @@ from .project import load_project, normalized_words, project_paths, sha256, writ
 from .pronunciation import asr_equivalences, audit_lexicon, load_reviewed_lexicon
 from .selection_integrity import audit_candidate_selection
 from .asr_cache import evidence_key, load as load_asr_cache, save as save_asr_cache
+from .performance import resolve_profile
 
 
 ASR_DEVICE = "cpu"
@@ -156,22 +157,32 @@ def _alignment_complete(
     return not missing, missing
 
 
-def run_mfa_alignment(
-    project: Path, repo: Path, takes: list[dict[str, Any]]
-) -> dict[str, Any]:
-    """Run local MFA against one generated sentence take per corpus entry.
+def _transient_alignment_failure(text: str) -> bool:
+    """Retry only host-worker failures, never linguistic or evidence failures."""
+    value = text.casefold()
+    markers = (
+        "resource_tracker", "semaphore", "multiprocessing", "broken pipe",
+        "worker process", "worker startup", "cannot start new thread",
+    )
+    return any(marker in value for marker in markers)
 
-    This creates private, reproducible evidence only. It never downloads a
-    dictionary/model, calls a network service, or mutates global MFA state.
+
+def run_mfa_alignment(
+    project: Path, repo: Path, takes: list[dict[str, Any]], *, performance_profile: str = "legacy"
+) -> dict[str, Any]:
+    """Align selected takes locally with isolated attempts and conservative fallback.
+
+    An automatic profile may start with bounded MFA workers.  Only a recognised
+    host-worker failure gets one clean serial retry; model, dictionary, corpus,
+    and incomplete-evidence failures are still blocking.
     """
     paths = project_paths(project)
     config = load_project(project)
+    profile = resolve_profile(performance_profile)
     mfa = _mfa_command(repo)
     report: dict[str, Any] = {
-        "required": True,
-        "available": bool(mfa),
-        "ok": False,
-        "takes": len(takes),
+        "required": True, "available": bool(mfa), "ok": False,
+        "takes": len(takes), "performance_profile": profile.as_dict(), "attempts": [],
     }
     if not mfa:
         report["failure"] = "mfa executable is missing"
@@ -184,59 +195,62 @@ def run_mfa_alignment(
         write_json(paths["production"] / "forced-alignment.json", report)
         return report
 
-    corpus = paths["production"] / "mfa" / "corpus"
-    aligned = paths["production"] / "mfa" / "aligned"
-    runtime = paths["production"] / "mfa" / "runtime"
+    root = paths["production"] / "mfa"
+    corpus = root / "corpus"
+    canonical = root / "aligned"
+    attempts_root = root / "attempts"
     shutil.rmtree(corpus, ignore_errors=True)
-    shutil.rmtree(aligned, ignore_errors=True)
     corpus.mkdir(parents=True, exist_ok=True)
-    runtime.mkdir(parents=True, exist_ok=True)
+    attempts_root.mkdir(parents=True, exist_ok=True)
     for take in takes:
         source = project / str(take["file"])
         stem = corpus / str(take["id"])
         _ffmpeg_wav(source, stem.with_suffix(".wav"))
-        stem.with_suffix(".lab").write_text(
-            str(take["text"]).strip() + "\n", encoding="utf-8"
-        )
+        stem.with_suffix(".lab").write_text(str(take["text"]).strip() + "\n", encoding="utf-8")
 
-    command = [
-        mfa,
-        "align",
-        "--clean",
-        "--single_speaker",
-        "--output_format",
-        "json",
-        "--temporary_directory",
-        str(runtime),
-        str(corpus),
-        dictionary,
-        acoustic,
-        str(aligned),
-    ]
-    completed = subprocess.run(
-        command, capture_output=True, text=True, env=_mfa_environment(repo)
-    )
-    complete, missing = (
-        _alignment_complete(aligned, takes)
-        if completed.returncode == 0
-        else (False, [str(t["id"]) for t in takes])
-    )
-    report.update(
-        {
-            "dictionary": dictionary,
-            "acoustic_model": acoustic,
-            "command": command,
-            "returncode": completed.returncode,
-            "stdout_tail": completed.stdout[-2000:],
-            "stderr_tail": completed.stderr[-2000:],
-            "aligned_directory": str(aligned.relative_to(project)),
-            "missing_alignment": missing,
-            "ok": completed.returncode == 0 and complete,
-        }
-    )
+    modes = [("serial", 1)]
+    if profile.alignment_multiprocessing and profile.alignment_jobs > 1:
+        modes = [("parallel", profile.alignment_jobs), ("serial-fallback", 1)]
+    accepted: Path | None = None
+    for attempt_index, (mode, jobs) in enumerate(modes, 1):
+        attempt_root = attempts_root / f"attempt-{attempt_index:02d}-{mode}"
+        runtime, aligned = attempt_root / "runtime", attempt_root / "aligned"
+        shutil.rmtree(attempt_root, ignore_errors=True)
+        runtime.mkdir(parents=True, exist_ok=True)
+        command = [
+            mfa, "align", "--clean", "--single_speaker", "--output_format", "json",
+            "--temporary_directory", str(runtime),
+        ]
+        if jobs > 1:
+            command.extend(["--num_jobs", str(jobs)])
+        command.extend([str(corpus), dictionary, acoustic, str(aligned)])
+        completed = subprocess.run(command, capture_output=True, text=True, env=_mfa_environment(repo))
+        complete, missing = _alignment_complete(aligned, takes) if completed.returncode == 0 else (False, [str(t["id"]) for t in takes])
+        output = f"{completed.stdout}\n{completed.stderr}"
+        transient = completed.returncode != 0 and _transient_alignment_failure(output)
+        report["attempts"].append({
+            "mode": mode, "jobs": jobs, "command": command, "returncode": completed.returncode,
+            "stdout_tail": completed.stdout[-2000:], "stderr_tail": completed.stderr[-2000:],
+            "missing_alignment": missing, "transient_worker_failure": transient,
+        })
+        if completed.returncode == 0 and complete:
+            accepted = aligned
+            break
+        if not (attempt_index == 1 and mode == "parallel" and transient and profile.alignment_serial_fallback):
+            break
+    final = report["attempts"][-1] if report["attempts"] else {}
+    if accepted is not None:
+        shutil.rmtree(canonical, ignore_errors=True)
+        shutil.copytree(accepted, canonical)
+    report.update({
+        "dictionary": dictionary, "acoustic_model": acoustic,
+        "command": final.get("command", []), "returncode": final.get("returncode"),
+        "stdout_tail": final.get("stdout_tail", ""), "stderr_tail": final.get("stderr_tail", ""),
+        "aligned_directory": str(canonical.relative_to(project)),
+        "missing_alignment": final.get("missing_alignment", []), "ok": accepted is not None,
+    })
     write_json(paths["production"] / "forced-alignment.json", report)
     return report
-
 
 def _normalized_asr_with_evidence(
     text: str, equivalences: list[dict[str, str]]
@@ -289,7 +303,7 @@ def _acoustic_checks(mono: np.ndarray, rate: int, words: int) -> list[str]:
     return failures
 
 
-def verify(project: Path, repo: Path) -> dict[str, Any]:
+def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") -> dict[str, Any]:
     import whisper
 
     paths = project_paths(project)
@@ -399,7 +413,7 @@ def verify(project: Path, repo: Path) -> dict[str, Any]:
             continue
         failures.append(unit_id)
     alignment = (
-        run_mfa_alignment(project, repo, selected)
+        run_mfa_alignment(project, repo, selected, performance_profile=performance_profile)
         if selected
         else {"ok": False, "failure": "no verified takes"}
     )

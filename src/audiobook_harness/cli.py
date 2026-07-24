@@ -110,6 +110,8 @@ def main() -> None:
         command.add_argument("project", type=Path)
         if name == "stage":
             command.add_argument("--output", type=Path)
+        if name == "verify":
+            command.add_argument("--performance-profile", choices=("legacy", "auto"), default="legacy")
         if name == "status":
             command.add_argument("--watch", action="store_true")
     args = parser.parse_args()
@@ -134,7 +136,7 @@ def main() -> None:
         "analyze": lambda: analyze(project),
         "generate": lambda: generate(project, REPO),
         "retry": lambda: generate(project, REPO, failed_only=True),
-        "verify": lambda: verify(project, REPO),
+        "verify": lambda: verify(project, REPO, performance_profile=args.performance_profile),
         "release": lambda: assemble(project),
         "stage": lambda: stage(project, args.output),
         "promote": lambda: promote(project),

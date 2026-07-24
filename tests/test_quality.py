@@ -77,3 +77,12 @@ def test_asr_cache_key_changes_with_every_evidence_input():
     assert base != evidence_key(
         audio_sha256="audio", model_sha256="model", decode={"beam_size": 5}, device="mps"
     )
+
+
+def test_only_worker_runtime_failures_qualify_for_serial_fallback():
+    from audiobook_harness.quality import _transient_alignment_failure
+
+    assert _transient_alignment_failure("resource_tracker leaked semaphore objects")
+    assert _transient_alignment_failure("Broken pipe while worker process started")
+    assert not _transient_alignment_failure("dictionary contains an out-of-vocabulary word")
+    assert not _transient_alignment_failure("alignment output is incomplete")
