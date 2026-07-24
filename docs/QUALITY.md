@@ -90,3 +90,11 @@ JSON lifecycle state and a readable Markdown progress view.
 
 The harness intentionally does not ship sound effects, music, cloned voices,
 cloud services, telemetry, synthetic scene audio, or automatic asset retrieval.
+
+## Durable runs
+
+The production runner is a single writer for visible run status. Child work
+emits append-only events; it does not rewrite the shared progress snapshot. A
+chapter becomes complete only when a receipt binds its quality report and every
+staged media file to exact hashes. On resume, receipts—not a stale display
+phase or output filenames—determine which chapters may be skipped.
