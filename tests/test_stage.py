@@ -25,6 +25,22 @@ def test_status_writes_machine_and_readable_progress(tmp_path: Path):
     assert "verify" in render_status(project).read_text()
 
 
+def test_terminal_status_is_explicitly_historical(tmp_path: Path):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    write_run_status(
+        project,
+        state="failed",
+        phase="verify",
+        steps=[{"name": "verify", "state": "running"}],
+        error={"type": "RuntimeError", "message": "example"},
+    )
+    progress = render_status(project).read_text()
+    assert "completed historical snapshot, not a live command" in progress
+    assert "**Production owner:** `terminal`" in progress
+
+
 def test_promotion_requires_current_verified_stage(tmp_path: Path):
     template = Path(__file__).parents[1] / "templates/project"
     project = tmp_path / "book"

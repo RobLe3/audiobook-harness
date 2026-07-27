@@ -85,8 +85,11 @@ remain explicit project-local lexicon entries.
 
 `stage` writes all verified deliverables and a hash-bound manifest beneath the
 project staging directory. `promote` checks that verification has not changed and
-then replaces the project deliverables atomically. `status --watch` refreshes both
-JSON lifecycle state and a readable Markdown progress view.
+then replaces the project deliverables atomically. `status --watch` displays the
+JSON lifecycle state and its readable Markdown progress view. The progress
+contract carries its source timestamp and the PID of the production command.
+If that command is gone, a previously `running` snapshot is marked interrupted;
+it is never treated as proof of current work.
 
 The harness intentionally does not ship sound effects, music, cloned voices,
 cloud services, telemetry, synthetic scene audio, or automatic asset retrieval.
@@ -97,4 +100,5 @@ The production runner is a single writer for visible run status. Child work
 emits append-only events; it does not rewrite the shared progress snapshot. A
 chapter becomes complete only when a receipt binds its quality report and every
 staged media file to exact hashes. On resume, receipts—not a stale display
-phase or output filenames—determine which chapters may be skipped.
+phase, a dead owner PID, or output filenames—determine which chapters may be
+skipped.

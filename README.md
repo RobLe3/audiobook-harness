@@ -16,6 +16,18 @@ generation, or cloud APIs.
 
 The animation is a local ASCII-style production walkthrough. It illustrates eight quality checkpoints. The command-line status view intentionally groups them into five clear milestones: analyse, generate, verify, stage and promote. It shows a release contract, not a benchmark: actual time depends on manuscript length, reviewed vocabulary, hardware and rejected takes. See the [production walkthrough](docs/PRODUCTION_WALKTHROUGH.md) for both a plain-language and expert view.
 
+## Progress you can trust
+
+Every production command writes `production/run-status.json` and the matching
+human-readable `production/progress.md`. `status --watch` displays the same
+file with a progress bar and current stage; it does not guess from output files.
+The view records its own update timestamp and the PID of the command that wrote
+the active state. If that command no longer exists, the harness labels the
+snapshot **interrupted** rather than pretending work is still running. A failed
+or completed run is explicitly labelled historical. This makes it safe to
+monitor a long operation from a second terminal without confusing an old render
+of the progress file for a live job.
+
 ## Quick start
 
 ```bash
