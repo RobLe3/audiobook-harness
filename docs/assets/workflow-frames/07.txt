@@ -1,10 +1,9 @@
-CHAPTER  ::  STAGE 6 / 8
+CHECKPOINT 6 / 8  ::  SELECT OR REPAIR ONCE
 
-  [██████··]  build the local master
+  [██████··]  evidence-bound recovery
 
-  approved narration  +  approved optional music / ambience
-                         |
-                         v
-  lossless master  ->  compact M4A + MP3 deliverables
+  passing candidates  ->  closest verified deterministic take
+  failed unit IDs     ->  one bounded candidate repair
+  same terminal result + same inputs  ->  stop, do not loop
 
-Audio is assembled only after the narration has passed its gates.
+No retry changes pronunciation, ASR, acoustic or MFA limits.

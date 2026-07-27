@@ -1,12 +1,9 @@
-CHAPTER  ::  STAGE 5 / 8
+CHECKPOINT 5 / 8  ::  CHECK SOUND + ALIGNMENT
 
-  [█████···]  pre-mix release contract
+  [█████···]  objective acoustic evidence
 
-  pronunciation map    pause + energy maps    cue-sheet hashes
-           \                 |                 /
-            \----------------+----------------/
-                             |
-                             v
-                   one coherent release contract
+  clipping / silence / abnormal duration  ->  reject
+  local MFA word alignment                ->  timing proof
+  contextual dialogue                     ->  no leaked words
 
-Stale evidence or a changed cue blocks the chapter here.
+A runtime worker may retry serially; a quality failure may not.

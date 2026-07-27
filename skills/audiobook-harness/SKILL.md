@@ -11,13 +11,19 @@ Use this skill when an author wants a local, verified audiobook.
 5. Review and approve every pronunciation-sensitive lexicon entry.
 6. Inspect `production/analysis.json`: terse quoted dialogue must use only
    `adjacent_manuscript_context`, never an invented context or isolated take.
-7. Run `generate`, then `verify`; use `retry` only for failed units.
+7. Prefer `produce` for a monitored staged run. It may repair failed units once
+   and must keep every verification threshold unchanged. For manual operation,
+   run `generate`, then `verify`; use `retry` only for failed units.
 8. Treat a term- or phrase-level ASR equivalence as valid only when reviewed IPA, source, exact lexicon scope, dual-ASR evidence, and alignment evidence are present. Record it in the project lexicon; never add a broad correction for an ordinary word.
-9. Run `stage`, monitor `status --watch`, and run `promote` only after verification passes. Never copy staged media manually.
+9. Monitor `status --watch`, inspect staged audio and verification evidence,
+   and run `promote` only after verification passes. Never copy staged media
+   manually.
 
 ## Rules
 
 - Work locally and offline after explicit setup.
 - Never make cloud TTS, synthetic SFX, music, or video a hidden fallback.
+- Never delete or bypass the input-bound recovery ledger to force another
+  identical automatic retry.
 - Never treat an ASR score alone as subjective proof; keep review evidence for accepted exceptions.
 - Do not clone voices without explicit rights and user instruction.

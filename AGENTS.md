@@ -9,6 +9,11 @@ Use the local staged workflow only:
 5. `audiobook-harness verify <project>`
 6. `audiobook-harness release <project>`
 
+For an unattended staged run, use `audiobook-harness produce <project>`. It
+runs the same gates, permits at most one failed-unit candidate repair, and
+never promotes automatically. Do not bypass its input-bound recovery ledger or
+convert a quality rejection into a generic process retry.
+
 Do not publish audio directly from TTS. Generate bounded semantic takes, verify
 with two local ASR passes and MFA, and reject or retry failures. Keep names,
 acronyms, foreign terms, numbers, and dates in the pronunciation lexicon.

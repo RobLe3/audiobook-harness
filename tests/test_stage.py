@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from audiobook_harness import cli
 from audiobook_harness.project import scaffold, sha256
 from audiobook_harness.status import render_status, write_run_status
 from audiobook_harness.tts import promote
@@ -74,3 +75,43 @@ def test_promotion_rejects_stale_verification(tmp_path: Path):
     )
     with pytest.raises(RuntimeError, match="stale"):
         promote(project)
+
+
+def test_produce_repairs_failed_units_once_then_stages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    calls: list[tuple[str, bool]] = []
+    verifications = iter(
+        [
+            {"ok": False, "failures": ["chapter-01-u001"]},
+            {"ok": True, "failures": [], "takes": []},
+        ]
+    )
+    monkeypatch.setattr(cli, "analyze", lambda value: {"ok": True})
+
+    def fake_generate(value: Path, repo: Path, *, failed_only: bool = False):
+        calls.append(("generate", failed_only))
+        return {"ok": True}
+
+    monkeypatch.setattr(cli, "generate", fake_generate)
+    monkeypatch.setattr(
+        cli,
+        "verify",
+        lambda value, repo, *, performance_profile: next(verifications),
+    )
+    monkeypatch.setattr(cli, "stage", lambda value, output: {"state": "staged"})
+    result = cli.produce(
+        project,
+        output=None,
+        performance_profile="auto",
+        maximum_candidate_retries=1,
+    )
+    assert result["ok"]
+    assert result["candidate_retries"] == 1
+    assert calls == [("generate", False), ("generate", True)]
+    status = json.loads((project / "production/run-status.json").read_text())
+    assert status["state"] == "complete"
+    assert all(row["state"] == "complete" for row in status["steps"])

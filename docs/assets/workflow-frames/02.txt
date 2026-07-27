@@ -1,11 +1,11 @@
-CHAPTER  ::  STAGE 1 / 8
+CHECKPOINT 1 / 8  ::  ANALYZE THE MANUSCRIPT
 
-  [█·······]  preflight + manuscript analysis
+  [█·······]  source-preserving analysis
 
-  manuscript
+  chapter text
       |
-      +-- sentence, pause and breath structure
+      +-- complete semantic performance units
       +-- names, acronyms, numbers and foreign terms
       `-- short quoted turns that need real context
 
-Output: a chapter plan before any narration is created.
+The harness plans before loading the voice model.

@@ -1,12 +1,9 @@
-CHAPTER  ::  STAGE 4 / 8
+CHECKPOINT 4 / 8  ::  COMPARE EVERY SPOKEN WORD
 
-  [████····]  text, timing and short-dialogue QA
+  [████····]  two independent local ASR passes
 
-  Whisper A  -----\
-                    +--> expected spoken text
-  Whisper B  -----/      duration / silence / peak checks
-                            |
-                            v
-                     local MFA word + phone alignment
+  candidate audio  ->  Whisper A  --\
+                                      +--> expected text
+  candidate audio  ->  Whisper B  --/
 
-Short turns use real manuscript context, then target-only proof.
+Names, numbers, negations and surrounding words stay explicit.

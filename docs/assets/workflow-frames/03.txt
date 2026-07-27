@@ -1,13 +1,9 @@
-CHAPTER  ::  STAGE 2 / 8
+CHECKPOINT 2 / 8  ::  RESOLVE PRONUNCIATION + CONTEXT
 
-  [██······]  bounded narration synthesis
+  [██······]  reviewed input authority
 
-  semantic performance unit
-             |
-             v
-  Kokoro + fixed voice, pace and pronunciation plan
-             |
-             v
-  lossless take + text + phoneme + hash evidence
+  pronunciation-sensitive term  ->  reviewed local lexicon
+  one-to-five-word dialogue      ->  adjacent manuscript context
 
-Generate small units; never trust one long TTS request.
+Unknown terms and context-free terse replies block generation.
+The harness does not guess how a protected name should sound.

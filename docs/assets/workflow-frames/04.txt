@@ -1,13 +1,10 @@
-CHAPTER  ::  STAGE 3 / 8
+CHECKPOINT 3 / 8  ::  GENERATE BOUNDED CANDIDATES
 
-  [███·····]  prove candidates, then reassemble
+  [███·····]  deterministic local Kokoro takes
 
-  candidate A / B / contextual repair
-                |
-                v
-  exact target only?  no leaked neighbouring words?
-                |
-                v
-  select one hash-bound take for the cue sheet
+  semantic unit + voice + pace + phonemes
+                       |
+                       v
+          small content-addressed FLAC candidates
 
-Only demonstrated repairs replace an approved predecessor.
+No long paragraph request becomes release audio by default.

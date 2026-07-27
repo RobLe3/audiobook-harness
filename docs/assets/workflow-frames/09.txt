@@ -1,12 +1,12 @@
-CHAPTER  ::  STAGE 8 / 8
+CHECKPOINT 8 / 8  ::  REVIEW, THEN PROMOTE
 
-  [████████]  package and stage verified deliverables
+  [████████]  deliberate release
 
-  chapter.m4a     chapter.mp3     release-manifest.json
-       |                |                  |
-       `----------------+------------------'
-                        |
-                        v
-                 isolated staging directory
+  listen to staged audio
+          + inspect production/verification.json
+          + confirm the stage manifest is still current
+                           |
+                           v
+                 atomic promotion to deliverables
 
-A staged chapter is ready for the series audit, not yet promotion.
+A partial or stale stage never becomes the release.

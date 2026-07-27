@@ -38,10 +38,25 @@ fallbacks.
    source. If both local ASR decoders later use a different spelling for a
    correctly reviewed name or phrase, add that spelling only as a documented
    project-local `asr_equivalents` entry; it never changes the narration input.
-8. Run `generate`, then `verify`. Generation creates bounded deterministic candidates; verification selects only a candidate that passes two local Whisper decoders, acoustic checks, and per-take local MFA alignment.
-9. Run `stage`, monitor `status --watch`, then run `promote`. Promotion is blocked until the staged manifest still matches successful verification.
+8. Run `produce`. It generates bounded deterministic candidates, verifies them
+   with two local Whisper decoders, acoustic checks and per-take local MFA
+   alignment, adds one bounded candidate repair only for failed units, and
+   stages the verified result.
+9. Monitor `status --watch`, listen to the staged result, inspect
+   `production/verification.json`, then run `promote`. Promotion is blocked
+   until the staged manifest still matches successful verification.
 
 ## The normal command sequence
+
+The shortest command sequence is:
+
+```bash
+.venv/bin/audiobook-harness produce projects/my-book --performance-profile auto
+.venv/bin/audiobook-harness status projects/my-book --watch
+.venv/bin/audiobook-harness promote projects/my-book
+```
+
+For manual control, use:
 
 ```bash
 .venv/bin/audiobook-harness analyze projects/my-book
@@ -62,6 +77,7 @@ A block is a safety feature, not an invitation to bypass a check.
 | `doctor` is not OK | A local prerequisite or pinned model is absent. | Run explicit setup or install the named prerequisite. |
 | Unresolved lexicon term | The harness cannot safely guess the pronunciation. | Review `lexicon.json`, then re-run `analyze`. |
 | ASR, acoustic, alignment, or contextual-protocol failure | No candidate is proven against the expected text and current release method. | Correct the lexicon or manuscript context, run `retry`, then verify again. |
+| Automatic repair already terminal | The same failed units already exhausted the bounded repair with identical inputs. | Inspect `production/verification.json`; change the source, reviewed lexicon, configuration, or harness only when the evidence supports it. |
 | Staging or promotion block | The batch is incomplete or its verification evidence changed. | Re-run verification and stage a complete batch; do not copy files manually. |
 | Non-English MFA profile missing | MFA would have to guess/download a model. | Install a local model deliberately and name it in `project.yaml`. |
 

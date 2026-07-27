@@ -1,9 +1,9 @@
-CHAPTER  ::  STAGE 7 / 8
+CHECKPOINT 7 / 8  ::  STAGE VERIFIED AUDIO
 
-  [███████·]  post-mix quality + regression verification
+  [███████·]  hash-bound isolated output
 
-  final transcription  ->  manuscript comparison
-  joins + loudness      ->  acoustic integrity
-  changed cues          ->  hash-bound non-regression check
+  selected takes  ->  candidate-integrity audit
+                  ->  chapter FLAC + M4A + MP3
+                  ->  stage-manifest.json
 
-Ambiguous changes keep the approved predecessor; failures stop release.
+The unattended produce command stops here.

@@ -37,7 +37,9 @@ def owner_activity(status: dict[str, Any]) -> tuple[str, str]:
     try:
         command = subprocess.run(
             ["ps", "-p", str(pid), "-o", "command="],
-            check=False, capture_output=True, text=True,
+            check=False,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
     except OSError:
         command = ""
@@ -55,14 +57,18 @@ def write_run_status(
         json.loads(path.read_text()) if path.exists() else {"version": 2, "steps": []}
     )
     current.update(changes)
-    current.update({
-        "version": max(int(current.get("version", 1)), 2),
-        "progress_schema": PROGRESS_SCHEMA,
-        "state": state,
-        "phase": phase,
-        "updated_at": _now(),
-        "owner_pid": os.getpid() if state == "running" else current.get("owner_pid"),
-    })
+    current.update(
+        {
+            "version": max(int(current.get("version", 1)), 2),
+            "progress_schema": PROGRESS_SCHEMA,
+            "state": state,
+            "phase": phase,
+            "updated_at": _now(),
+            "owner_pid": os.getpid()
+            if state == "running"
+            else current.get("owner_pid"),
+        }
+    )
     write_json(path, current)
     render_status(project, current)
     return current
@@ -83,9 +89,7 @@ def render_status(project: Path, status: dict[str, Any] | None = None) -> Path:
     width = 20
     filled = int(width * completed / max(1, len(steps)))
     is_active = status.get("state") == "running" and owner_state == "active"
-    bar = "█" * filled + (
-        "▌" if is_active and filled < width else ""
-    )
+    bar = "█" * filled + ("▌" if is_active and filled < width else "")
     bar += "·" * (width - len(bar))
     output = paths["production"] / "progress.md"
     history = ""
@@ -96,16 +100,25 @@ def render_status(project: Path, status: dict[str, Any] | None = None) -> Path:
         )
     elif status.get("state") in {"failed", "complete"}:
         history = "\n**Run status:** this is a completed historical snapshot, not a live command.\n"
+    retry_detail = ""
+    if status.get("maximum_candidate_retries") is not None:
+        retry_detail = (
+            "\n**Bounded candidate repair:** "
+            f"{status.get('candidate_retries', 0)}/"
+            f"{status.get('maximum_candidate_retries')} used. "
+            "Quality thresholds remain unchanged.\n"
+        )
+    symbols = {"complete": "█", "running": "▌", "failed": "✕"}
     output.write_text(
         "# Audiobook Harness progress\n\n"
         f"Updated: {status.get('updated_at', _now())}\n\n"
         f"**State:** `{status.get('state', 'not_started')}`\n\n"
         f"**Production owner:** `{owner_state}` — {owner_detail}.\n"
-        f"{history}\n"
+        f"{history}{retry_detail}\n"
         f"`[{bar}] {completed}/{len(steps)} steps complete`\n\n"
         f"**Current:** {active_step}\n\n"
         + "\n".join(
-            f"- {'█' if row.get('state') == 'complete' else '▌' if row.get('state') == 'running' else '·'} {row.get('name')}"
+            f"- {symbols.get(str(row.get('state')), '·')} {row.get('name')}"
             for row in steps
         )
         + "\n",

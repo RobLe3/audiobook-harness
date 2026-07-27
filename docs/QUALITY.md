@@ -102,3 +102,16 @@ chapter becomes complete only when a receipt binds its quality report and every
 staged media file to exact hashes. On resume, receipts—not a stale display
 phase, a dead owner PID, or output filenames—determine which chapters may be
 skipped.
+
+`produce` may add one bounded set of pace candidates for unit IDs rejected by
+the current verification report. It then repeats the complete dual-ASR,
+acoustic, selection-integrity and MFA decision. It does not retry a missing
+model, invalid dictionary, unresolved pronunciation, implementation exception,
+or alignment-quality failure as though it were a candidate problem.
+
+If the repaired candidates still fail, the harness records only the failed unit
+IDs and an input-bound signature in `production/recovery-ledger.jsonl`. The
+ledger contains no manuscript or audio. The same terminal failure is not given
+another automatic retry until the source, configuration, lexicon, model lock or
+harness code changes. This prevents repeated work without converting a failure
+into a pass.

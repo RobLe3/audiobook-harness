@@ -28,6 +28,13 @@ or completed run is explicitly labelled historical. This makes it safe to
 monitor a long operation from a second terminal without confusing an old render
 of the progress file for a live job.
 
+`produce` runs analysis, candidate generation, dual-ASR and MFA verification,
+one bounded failed-unit repair, and staging as one monitored command. It never
+promotes files automatically. If the same failed units recur with the same
+manuscript, lexicon, configuration and harness code, an input-bound recovery
+ledger prevents the next run from spending the same retry again. Changed inputs
+receive a new identity and can be tried normally.
+
 ## Quick start
 
 ```bash
@@ -36,11 +43,9 @@ python scripts/setup.py --interactive
 .venv/bin/audiobook-harness performance --profile auto
 .venv/bin/audiobook-harness new-project projects/my-book
 # place your licensed manuscript text at projects/my-book/source/chapter-01.txt
-.venv/bin/audiobook-harness analyze projects/my-book
-.venv/bin/audiobook-harness generate projects/my-book
-.venv/bin/audiobook-harness verify projects/my-book --performance-profile auto
-.venv/bin/audiobook-harness stage projects/my-book
+.venv/bin/audiobook-harness produce projects/my-book --performance-profile auto
 .venv/bin/audiobook-harness status projects/my-book --watch
+# listen to the staged files and inspect production/verification.json
 .venv/bin/audiobook-harness promote projects/my-book
 ```
 
@@ -55,11 +60,15 @@ read [setup](docs/SETUP.md), the [quality contract](docs/QUALITY.md),
 [Container smoke test](docs/SETUP.md#container-smoke-test).
 
 `performance --profile auto` displays a conservative local CPU budget. Pass
-`--performance-profile auto` to `verify` to use it for forced alignment. If a
+`--performance-profile auto` to `verify` or `produce` to use it for forced alignment. If a
 parallel alignment worker fails for a recognised transient runtime reason, the
 same work restarts once in a clean serial runtime; dictionary, corpus, semantic
 and quality failures remain blocking. It never weakens the quality contract or
 turns GPU/NPU use into release evidence.
+
+If you prefer explicit control, run `analyze`, `generate`, `verify`, `stage`,
+and `promote` separately. `retry` adds bounded candidates only for units listed
+as failed by the current verification report.
 
 ## Verify this checkout
 

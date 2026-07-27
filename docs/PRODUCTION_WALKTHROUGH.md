@@ -13,11 +13,13 @@ verified takes, and promote a release only after its evidence is complete.
    instead of one long, unreviewable request.
 4. **Compare the spoken words** — two independent local speech-to-text passes
    compare the audio with the approved text.
-5. **Check the recording** — reject clipping, abnormal duration and unexpected
-   silence before a take can be selected.
-6. **Align the words** — local forced alignment confirms that each selected take
-   has timing evidence. An optional conservative worker profile retries only a
-   recognised host-worker failure once in a clean serial runtime.
+5. **Check and align the recording** — reject clipping, abnormal duration and
+   unexpected silence, then use local forced alignment to confirm word timing.
+   An optional conservative worker profile retries only a recognised
+   host-worker failure once in a clean serial runtime.
+6. **Select or repair once** — choose the closest verified deterministic take.
+   `produce` may generate one bounded repair set for failed unit IDs. An
+   identical terminal result with identical inputs is not retried again.
 7. **Stage the release** — assemble only selected takes, re-check the selection
    record, and package an M4A audiobook and MP3 audiobook with a manifest.
 8. **Promote deliberately** — replace the canonical release atomically only
@@ -35,9 +37,8 @@ explain what the milestones protect.
 | Read and plan | `production/analysis.json`, reviewed pronunciation data | Unknown terms or unsafe terse dialogue require review. |
 | Generate | `production/candidates.json`, content-addressed FLAC takes | Only bounded candidates enter verification. |
 | Compare words | `production/asr-evidence-cache.json`, `verification.json` | Both local ASR passes must meet the configured text-fidelity limit. |
-| Check recording | per-candidate acoustic results in `verification.json` | Clipping, abnormal duration or unexpected silence rejects a take. |
-| Align | `production/forced-alignment.json`, `production/mfa/aligned/` | Every selected take needs local alignment evidence. |
-| Select | `production/verification.json` and selection-integrity audit | Ambiguous replacements retain a hash-verified predecessor rather than guessing. |
+| Check and align | per-candidate acoustic results, `production/forced-alignment.json`, `production/mfa/aligned/` | Malformed audio or incomplete timing evidence rejects a take. |
+| Select or repair | `production/verification.json`, selection-integrity audit and input-bound recovery signature | Only failed units receive one bounded repair; a repeated terminal result stops. |
 | Stage | staged M4A, MP3 and hash manifest | The staged files and evidence hashes must agree. |
 | Promote | promotion receipt and canonical manifest | Promotion is atomic; a partial staged directory is not a release. |
 
@@ -53,6 +54,9 @@ explain what the milestones protect.
 
 # Watch the five command-level milestones while a chapter is processed
 .venv/bin/audiobook-harness status projects/my-book --watch
+
+# Run those milestones as one staged command; promotion remains separate
+.venv/bin/audiobook-harness produce projects/my-book --performance-profile auto
 ```
 
 The workflow GIF is a readable local illustration of this contract. It is not a

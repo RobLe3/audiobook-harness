@@ -14,3 +14,30 @@ manifest is still current before replacing deliverables.
 Lifecycle state is stored under `production/run-status.json`; `status --watch`
 renders a portable `production/progress.md`. Production remains local and offline
 after explicit setup.
+
+## Unattended production
+
+`produce` is the single-process supervisor for a staged chapter set. It records
+five visible phases:
+
+1. manuscript and pronunciation analysis;
+2. bounded deterministic candidate generation;
+3. dual-ASR, acoustic and forced-alignment verification;
+4. one failed-unit candidate repair when evidence permits it; and
+5. hash-bound staging.
+
+The repair phase regenerates only unit IDs rejected by the current verification
+report. It does not retry dictionary, corpus, missing-model, implementation or
+other prerequisite failures. It does not alter WER, acoustic, alignment or
+pronunciation acceptance limits.
+
+The recovery signature includes the failed unit IDs and an input identity
+derived from source text, project configuration, the reviewed lexicon, model
+lock and harness code. A terminal signature is stored in
+`production/recovery-ledger.jsonl`. Repeating `produce` with unchanged inputs
+will not repeat a repair that has already ended with the same rejection. A real
+input or harness change produces a different identity.
+
+Staging is the end of unattended authority. Promotion remains a separate
+command so the listener can inspect the verification report and staged audio
+before replacing deliverables.

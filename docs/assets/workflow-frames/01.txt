@@ -1,9 +1,9 @@
-AUDIOBOOK HARNESS :: CHAPTER QUALITY PIPELINE
+AUDIOBOOK HARNESS :: LOCAL QUALITY PIPELINE
 
-A chapter moves forward only when its current stage passes.
+A chapter advances only when the current evidence passes.
 
-  [········]  0/8 stages complete
+  [········]  0/8 checkpoints complete
 
-  local manuscript  ->  verified deliverables
+  manuscript  ->  verified staged audio  ->  deliberate promotion
 
-No cloud fallback. No direct publishing from TTS.
+No cloud fallback. No direct publication from TTS.
