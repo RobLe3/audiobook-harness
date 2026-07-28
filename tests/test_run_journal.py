@@ -14,10 +14,29 @@ def test_stage_receipt_rejects_changed_output(tmp_path: Path):
         path.write_bytes(name.encode())
         media.append(path)
     receipt = write_stage_receipt(
-        tmp_path / "receipt.json", run_id="run", chapter_id="01", quality_report=report, media=media
+        tmp_path / "receipt.json", run_id="run", chapter_id="01", quality_report=report, media=media, dependency_fingerprint="identity-a"
     )
     assert receipt_is_valid(receipt, run_id="run", chapter_id="01", stage=stage,
-                            quality_report=report, expected_names={item.name for item in media})
+                            quality_report=report, expected_names={item.name for item in media}, dependency_fingerprint="identity-a")
     (stage / "chapter.mp3").write_bytes(b"changed")
     assert not receipt_is_valid(receipt, run_id="run", chapter_id="01", stage=stage,
-                                quality_report=report, expected_names={item.name for item in media})
+                                quality_report=report, expected_names={item.name for item in media}, dependency_fingerprint="identity-a")
+
+
+def test_stage_receipt_rejects_dependency_drift(tmp_path: Path):
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    report = tmp_path / "quality.json"
+    report.write_text("{}")
+    media = stage / "chapter.m4a"
+    media.write_bytes(b"verified")
+    receipt = write_stage_receipt(
+        tmp_path / "receipt.json", run_id="run", chapter_id="01",
+        quality_report=report, media=[media], dependency_fingerprint="inputs-a",
+    )
+    assert receipt_is_valid(receipt, run_id="run", chapter_id="01", stage=stage,
+                            quality_report=report, expected_names={media.name},
+                            dependency_fingerprint="inputs-a")
+    assert not receipt_is_valid(receipt, run_id="run", chapter_id="01", stage=stage,
+                                quality_report=report, expected_names={media.name},
+                                dependency_fingerprint="inputs-b")

@@ -29,7 +29,8 @@ def append_event(path: Path, event: dict[str, Any]) -> None:
 
 
 def write_stage_receipt(
-    path: Path, *, run_id: str, chapter_id: str, quality_report: Path, media: list[Path]
+    path: Path, *, run_id: str, chapter_id: str, quality_report: Path, media: list[Path],
+    dependency_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     """Bind a packaged chapter to its verified report and exact output bytes."""
     receipt = {
@@ -37,6 +38,10 @@ def write_stage_receipt(
         "run_id": run_id,
         "chapter_id": chapter_id,
         "quality_report_sha256": sha256(quality_report),
+        # A receipt without this is intentionally legacy evidence: callers that
+        # know their current input identity must reject it instead of silently
+        # promoting media made from stale source, lexicon, model, or code.
+        "dependency_fingerprint": dependency_fingerprint,
         "media": [
             {"name": item.name, "sha256": sha256(item), "bytes": item.stat().st_size}
             for item in media
@@ -49,10 +54,13 @@ def write_stage_receipt(
 def receipt_is_valid(
     receipt: dict[str, Any], *, run_id: str, chapter_id: str, stage: Path,
     quality_report: Path, expected_names: set[str],
+    dependency_fingerprint: str | None = None,
 ) -> bool:
     if receipt.get("run_id") != run_id or receipt.get("chapter_id") != chapter_id:
         return False
     if receipt.get("quality_report_sha256") != sha256(quality_report):
+        return False
+    if dependency_fingerprint is not None and receipt.get("dependency_fingerprint") != dependency_fingerprint:
         return False
     rows = receipt.get("media", [])
     if not isinstance(rows, list) or {str(row.get("name")) for row in rows} != expected_names:
