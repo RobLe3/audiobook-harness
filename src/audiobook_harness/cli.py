@@ -21,6 +21,7 @@ from .tts import generate, promote, stage, stage_manifest_is_valid
 from .run_journal import phase_receipt_is_valid, write_phase_receipt
 from .review import finalize_review, serve_review
 from .migration import apply_upgrade, upgrade_plan
+from .versioning import compatibility_receipt
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -352,6 +353,9 @@ def main() -> None:
     migrate.add_argument("project", type=Path)
     migrate.add_argument("--apply", action="store_true")
     migrate.add_argument("--inventory-sha256")
+    compatibility = sub.add_parser("compatibility-audit")
+    compatibility.add_argument("project", type=Path)
+    compatibility.add_argument("--apply", action="store_true")
     new = sub.add_parser("new-project")
     new.add_argument("directory", type=Path)
     for name in (
@@ -408,6 +412,9 @@ def main() -> None:
         return
     if args.command == "performance":
         emit({"ok": True, "profile": resolve_profile(args.profile).as_dict()})
+        return
+    if args.command == "compatibility-audit":
+        emit(compatibility_receipt(args.project.resolve(), apply=args.apply))
         return
     if args.command == "upgrade-project":
         project = args.project.resolve()

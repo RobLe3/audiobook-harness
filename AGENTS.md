@@ -1,5 +1,7 @@
 # Audiobook Harness agent contract
 
+This document describes Audiobook Harness **0.4.1**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
+
 Use the local staged workflow only:
 
 1. `audiobook-harness doctor`

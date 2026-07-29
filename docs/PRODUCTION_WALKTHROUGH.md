@@ -1,5 +1,7 @@
 # Production walkthrough
 
+This document describes Audiobook Harness **0.4.1**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
+
 The harness is designed for a simple outcome: produce audio locally, keep only
 verified takes, and promote a release only after its evidence is complete.
 

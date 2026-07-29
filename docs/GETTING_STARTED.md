@@ -1,5 +1,7 @@
 # First audiobook in one sitting
 
+This document describes Audiobook Harness **0.4.1**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
+
 This guide assumes you have the right to make an audiobook from the manuscript
 and to use the chosen voice. It uses no cloud TTS, telemetry, or hidden
 fallbacks.

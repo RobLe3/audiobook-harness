@@ -1,5 +1,7 @@
 # Planning time and performance
 
+This document describes Audiobook Harness **0.4.1**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
+
 ## Read this first
 
 These are **planning bands**, not benchmarks or product claims. The harness is

@@ -1,5 +1,7 @@
 # Quality contract
 
+This document describes Audiobook Harness **0.4.1**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
+
 The local production contract is: analyse, review pronunciation-sensitive terms,
 generate bounded deterministic candidates, verify every candidate, stage a
 complete verified batch, then promote it. A failed or ambiguous take is never

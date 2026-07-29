@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "audiobook-harness"
-version = "0.4.0"
+dynamic = ["version"]
 description = "Local-first, evidence-based audiobook production with Kokoro."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -33,3 +33,6 @@ packages = ["src/audiobook_harness"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.hatch.version]
+path = "src/audiobook_harness/_version.py"
