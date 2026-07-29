@@ -58,6 +58,11 @@ invalid phase:
 ```
 
 Verified earlier phases and matching input-addressed, waveform-hashed audio are retained.
+Repaired units keep immutable chapter and manuscript sequence fields, and
+packaging rejects missing, duplicate, or discontinuous selections rather than
+silently moving repaired audio to a chapter's end. Reviewed pronunciation
+overrides are occurrence-aware, including reviewed aliases, and the configured
+`outputs` list controls which FLAC, M4A, or MP3 files are staged.
 
 On Windows, use `.venv\\Scripts\\audiobook-harness.exe` instead.
 

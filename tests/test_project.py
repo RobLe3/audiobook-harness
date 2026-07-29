@@ -151,6 +151,36 @@ def test_asr_equivalences_without_pronunciation_evidence_are_rejected(tmp_path: 
     assert report["invalid_asr_equivalences"] == ["ExampleName"]
 
 
+def test_pronunciation_override_applies_to_every_reviewed_occurrence():
+    from audiobook_harness.pronunciation import apply_to_phonemes_with_evidence
+
+    resolved, evidence = apply_to_phonemes_with_evidence(
+        "Renaud met RENAUD.",
+        "default met default.",
+        {
+            "Renaud": {
+                "review_status": "reviewed",
+                "phoneme_override": "override",
+            }
+        },
+        lambda _value: "default",
+    )
+    assert resolved == "override met override."
+    assert [row["source_span"] for row in evidence] == [[0, 6], [11, 17]]
+
+
+def test_analysis_assigns_contiguous_immutable_unit_order(tmp_path: Path):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    (project / "source/chapter-01.txt").write_text("One sentence. Two sentences.")
+    report = analyze(project)
+    units = report["chapters"][0]["units"]
+    assert [row["unit_index"] for row in units] == [1, 2]
+    assert [row["global_sequence"] for row in units] == [1, 2]
+    assert all(row["source_span"][0] >= 0 for row in units)
+
+
 def test_retry_variants_extend_the_initial_bounded_set():
     from audiobook_harness.tts import RETRY_VARIANTS, VARIANTS
 

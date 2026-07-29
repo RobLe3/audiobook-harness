@@ -37,7 +37,8 @@ def analyze(project: Path) -> dict[str, Any]:
         "numbers": set(),
         "names_or_foreign": set(),
     }
-    for source in manuscript_files:
+    global_sequence = 0
+    for chapter_index, source in enumerate(manuscript_files, 1):
         text = source.read_text(encoding="utf-8").strip()
         units = performance_units(text)
         for name, pattern in (
@@ -56,23 +57,39 @@ def analyze(project: Path) -> dict[str, Any]:
         for index, unit in enumerate(units, 1):
             if bool(unit.get("requires_context_review", False)):
                 contextual_review_units.append(f"{source.stem}-{index:04d}")
+        unit_rows = []
+        search_from = 0
+        for index, unit in enumerate(units, 1):
+            global_sequence += 1
+            unit_text = str(unit["text"])
+            source_start = text.find(unit_text, search_from)
+            if source_start < 0:
+                source_start = text.find(unit_text)
+            source_end = source_start + len(unit_text) if source_start >= 0 else -1
+            if source_end >= 0:
+                search_from = source_end
+            unit_rows.append(
+                {
+                    "id": f"{source.stem}-{index:04d}",
+                    "text": unit_text,
+                    "words": normalized_words(unit_text),
+                    "chapter_index": chapter_index,
+                    "unit_index": index,
+                    "global_sequence": global_sequence,
+                    "source_span": [source_start, source_end],
+                    "source_sentence_indexes": unit["source_sentence_indexes"],
+                    "context_strategy": unit["context_strategy"],
+                    "contains_terse_dialogue": unit["contains_terse_dialogue"],
+                    "requires_context_review": unit["requires_context_review"],
+                }
+            )
         chapters.append(
             {
                 "id": source.stem,
+                "chapter_index": chapter_index,
                 "source": str(source.relative_to(project)),
                 "text": text,
-                "units": [
-                    {
-                        "id": f"{source.stem}-{index:04d}",
-                        "text": str(unit["text"]),
-                        "words": normalized_words(str(unit["text"])),
-                        "source_sentence_indexes": unit["source_sentence_indexes"],
-                        "context_strategy": unit["context_strategy"],
-                        "contains_terse_dialogue": unit["contains_terse_dialogue"],
-                        "requires_context_review": unit["requires_context_review"],
-                    }
-                    for index, unit in enumerate(units, 1)
-                ],
+                "units": unit_rows,
             }
         )
     lexicon = paths["lexicon"]

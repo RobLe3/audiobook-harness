@@ -17,6 +17,7 @@ from audiobook_harness.tts import (
     _prepare_stage_directory,
     promote,
     stage_manifest_is_valid,
+    _validated_ordered_takes,
 )
 
 
@@ -169,6 +170,29 @@ def test_legacy_release_command_refuses_direct_publication(tmp_path: Path):
     assert result.returncode == 2
     assert "no longer writes directly" in result.stderr
     assert not (project / "deliverables").exists()
+
+
+def test_repaired_middle_unit_is_restored_to_manuscript_order(tmp_path: Path):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    production = project / "production"
+    production.mkdir(exist_ok=True)
+    units = [
+        {
+            "id": f"chapter-01-{index:04d}",
+            "chapter_index": 1,
+            "unit_index": index,
+            "global_sequence": index,
+        }
+        for index in range(1, 4)
+    ]
+    (production / "analysis.json").write_text(
+        json.dumps({"chapters": [{"units": units}]})
+    )
+    repaired_append_order = [units[0], units[2], units[1]]
+    ordered = _validated_ordered_takes(project, repaired_append_order)
+    assert [row["unit_index"] for row in ordered] == [1, 2, 3]
 
 
 def test_produce_repairs_failed_units_once_then_stages(

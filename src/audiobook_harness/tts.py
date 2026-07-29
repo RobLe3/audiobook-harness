@@ -12,7 +12,11 @@ import numpy as np
 import soundfile as sf
 
 from .project import load_project, project_paths, sha256, write_json
-from .pronunciation import apply_to_phonemes, audit_lexicon, load_reviewed_lexicon
+from .pronunciation import (
+    apply_to_phonemes_with_evidence,
+    audit_lexicon,
+    load_reviewed_lexicon,
+)
 from .selection_integrity import audit_candidate_selection
 from .context_protocol import protocol_for_unit
 
@@ -111,7 +115,7 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
             unit_id, text = str(unit["id"]), str(unit["text"])
             if failed_only and unit_id not in failed:
                 continue
-            phonemes = apply_to_phonemes(
+            phonemes, pronunciation_occurrences = apply_to_phonemes_with_evidence(
                 text,
                 engine.tokenizer.phonemize(text, language),
                 lexicon,
@@ -169,6 +173,11 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
                         "file": str(target.relative_to(project)),
                         "sha256": sha256(target),
                         "source_hash": source_hash,
+                        "chapter_index": int(unit["chapter_index"]),
+                        "unit_index": int(unit["unit_index"]),
+                        "global_sequence": int(unit["global_sequence"]),
+                        "source_span": unit.get("source_span"),
+                        "pronunciation_occurrences": pronunciation_occurrences,
                         **engine_identity,
                         "source_sentence_indexes": unit.get(
                             "source_sentence_indexes", []
@@ -190,6 +199,13 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
         candidates = [
             row for row in existing["candidates"] if row["id"] not in failed
         ] + candidates
+    candidates.sort(
+        key=lambda row: (
+            int(row["chapter_index"]),
+            int(row["unit_index"]),
+            str(row["candidate"]),
+        )
+    )
     report = {
         "version": 4,
         "offline": True,
@@ -207,8 +223,10 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
 def _package(
     project: Path, rows: list[dict[str, Any]], output: Path
 ) -> list[dict[str, Any]]:
+    config = load_project(project)
+    ordered_rows = _validated_ordered_takes(project, rows)
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
+    for row in ordered_rows:
         grouped.setdefault(str(row["chapter"]), []).append(row)
     outputs = []
     for chapter, takes in grouped.items():
@@ -218,11 +236,15 @@ def _package(
             + "".join(f"file '../{row['file']}'\n" for row in takes)
         )
         files = []
-        for suffix, codec, extra in (
-            (".flac", "flac", []),
-            (".m4a", "aac", ["-b:a", "256k"]),
-            (".mp3", "libmp3lame", ["-b:a", "256k"]),
-        ):
+        formats = {
+            "flac": (".flac", "flac", []),
+            "m4a": (".m4a", "aac", ["-b:a", "256k"]),
+            "mp3": (".mp3", "libmp3lame", ["-b:a", "256k"]),
+        }
+        requested = config.get("outputs", ["m4a", "mp3"])
+        if not isinstance(requested, list) or not requested or any(value not in formats for value in requested):
+            raise ValueError("project.yaml outputs must contain one or more of: flac, m4a, mp3")
+        for suffix, codec, extra in (formats[str(value)] for value in requested):
             target = output / f"{chapter}_Audiobook{suffix}"
             target.parent.mkdir(parents=True, exist_ok=True)
             subprocess.run(
@@ -254,6 +276,36 @@ def _package(
             )
         outputs.append({"chapter": chapter, "files": files})
     return outputs
+
+
+def _validated_ordered_takes(
+    project: Path, rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    analysis = json.loads(
+        (project_paths(project)["production"] / "analysis.json").read_text(encoding="utf-8")
+    )
+    expected = [
+        (str(unit["id"]), int(unit["chapter_index"]), int(unit["unit_index"]), int(unit["global_sequence"]))
+        for chapter in analysis["chapters"]
+        for unit in chapter["units"]
+    ]
+    actual = [
+        (
+            str(row.get("id")),
+            int(row.get("chapter_index", -1)),
+            int(row.get("unit_index", -1)),
+            int(row.get("global_sequence", -1)),
+        )
+        for row in rows
+    ]
+    if len(actual) != len(set(item[0] for item in actual)):
+        raise RuntimeError("Cannot package: selected unit IDs are duplicated")
+    if set(actual) != set(expected):
+        raise RuntimeError("Cannot package: selected units are missing, unexpected, or misidentified")
+    ordered = sorted(rows, key=lambda row: int(row["global_sequence"]))
+    if [int(row["global_sequence"]) for row in ordered] != list(range(1, len(expected) + 1)):
+        raise RuntimeError("Cannot package: selected unit sequence is discontinuous")
+    return ordered
 
 
 def _prepare_stage_directory(project: Path, output: Path | None) -> Path:
@@ -302,6 +354,7 @@ def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
         raise RuntimeError(f"Cannot package: candidate selection integrity failed: {rules}")
     root = _prepare_stage_directory(project, output)
     outputs = _package(project, list(verification["takes"]), root)
+    ordered_takes = _validated_ordered_takes(project, list(verification["takes"]))
     expected_files = sorted(
         str(row["file"]) for chapter in outputs for row in chapter["files"]
     )
@@ -314,6 +367,17 @@ def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
         ),
         "outputs": outputs,
         "expected_files": expected_files,
+        "ordered_units": [
+            {
+                "id": row["id"],
+                "chapter": row["chapter"],
+                "chapter_index": row["chapter_index"],
+                "unit_index": row["unit_index"],
+                "global_sequence": row["global_sequence"],
+                "audio_sha256": row["sha256"],
+            }
+            for row in ordered_takes
+        ],
     }
     write_json(root / "stage-manifest.json", report)
     write_json(

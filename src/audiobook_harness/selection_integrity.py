@@ -58,6 +58,7 @@ def audit_candidate_selection(
             str(row.get("file")),
             str(row.get("sha256")),
             str(row.get("source_hash")),
+            str(row.get("global_sequence")),
         )
         for row in candidates
     }
@@ -101,6 +102,7 @@ def audit_candidate_selection(
             row["file"],
             expected_audio_sha,
             source_hash,
+            str(take.get("global_sequence")),
         )
         if key not in candidate_rows:
             errors.append({"rule": "selection_not_current_candidate", **row})
