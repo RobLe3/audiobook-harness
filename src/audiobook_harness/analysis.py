@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .contracts import build_analysis_contracts
 from .project import (
     load_project,
     normalized_words,
@@ -16,11 +17,50 @@ ACRONYM = re.compile(r"\b(?:[A-Z]{2,}|(?:[A-Z]\.){2,})\b")
 NUMBER = re.compile(r"\b\d+(?:[.,/]\d+)*\b")
 FOREIGN_OR_NAME = re.compile(r"\b[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'’-]+\b")
 ORDINARY_SENTENCE_STARTERS = {
-    "a", "after", "although", "an", "and", "as", "at", "before", "but",
-    "during", "for", "he", "her", "his", "however", "i", "if", "in", "it",
-    "its", "later", "meanwhile", "on", "or", "she", "so", "that", "the",
-    "their", "then", "there", "these", "they", "this", "those", "to", "we",
-    "when", "where", "while", "who", "with", "yet", "you",
+    "a",
+    "after",
+    "although",
+    "an",
+    "and",
+    "as",
+    "at",
+    "before",
+    "but",
+    "during",
+    "for",
+    "he",
+    "her",
+    "his",
+    "however",
+    "i",
+    "if",
+    "in",
+    "it",
+    "its",
+    "later",
+    "meanwhile",
+    "on",
+    "or",
+    "she",
+    "so",
+    "that",
+    "the",
+    "their",
+    "then",
+    "there",
+    "these",
+    "they",
+    "this",
+    "those",
+    "to",
+    "we",
+    "when",
+    "where",
+    "while",
+    "who",
+    "with",
+    "yet",
+    "you",
 }
 
 
@@ -114,6 +154,12 @@ def analyze(project: Path) -> dict[str, Any]:
         "release_blocked": bool(unresolved or contextual_review_units),
         "dialogue_rule": "Terse one-to-five-word quoted dialogue is kept in an adjacent real-manuscript performance unit; it is never synthesized as an isolated take.",
         "next": "Review lexicon.json; set review_status=reviewed for every pronunciation-sensitive entry.",
+    }
+    contracts = build_analysis_contracts(
+        project, chapters, str(config.get("language", "en-gb"))
+    )
+    report["contracts"] = {
+        name: value["identity_sha256"] for name, value in contracts.items()
     }
     write_json(paths["production"] / "analysis.json", report)
     return report

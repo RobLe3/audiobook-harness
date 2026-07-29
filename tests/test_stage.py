@@ -8,6 +8,7 @@ import pytest
 
 from audiobook_harness import cli
 from audiobook_harness.project import scaffold, sha256
+from audiobook_harness.review import build_review, finalize_review
 from audiobook_harness.resilience import production_input_identity
 from audiobook_harness.run_journal import write_phase_receipt
 from audiobook_harness.status import render_status, write_run_status
@@ -54,7 +55,9 @@ def test_terminal_status_is_explicitly_historical(tmp_path: Path):
     assert "**Production owner:** `terminal`" in progress
 
 
-def _verified_stage(project: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+def _verified_stage(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path]:
     verification_path = project / "production/verification.json"
     verification_path.parent.mkdir(exist_ok=True)
     verification_path.write_text(json.dumps({"ok": True, "takes": []}))
@@ -74,17 +77,25 @@ def _verified_stage(project: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Pat
         "verification_sha256": sha256(verification_path),
         "candidate_selection_integrity_sha256": sha256(integrity_path),
         "expected_files": [media.name],
-        "outputs": [{
-            "chapter": "chapter-01",
-            "files": [{
-                "file": media.name,
-                "sha256": sha256(media),
-                "bytes": media.stat().st_size,
-            }],
-        }],
+        "outputs": [
+            {
+                "chapter": "chapter-01",
+                "files": [
+                    {
+                        "file": media.name,
+                        "sha256": sha256(media),
+                        "bytes": media.stat().st_size,
+                    }
+                ],
+            }
+        ],
     }
     (stage / "stage-manifest.json").write_text(json.dumps(manifest))
     (project / "production/stage-manifest.json").write_text(json.dumps(manifest))
+    review = build_review(project, stage)
+    finalize_review(
+        project, [{"id": row["id"], "decision": "approve"} for row in review["items"]]
+    )
     return stage, media
 
 
@@ -208,6 +219,7 @@ def test_produce_repairs_failed_units_once_then_stages(
             {"ok": True, "failures": [], "takes": []},
         ]
     )
+
     def fake_analyze(value: Path):
         (value / "production/analysis.json").write_text('{"ok":true}')
         return {"ok": True}
@@ -221,6 +233,7 @@ def test_produce_repairs_failed_units_once_then_stages(
         return {"ok": True}
 
     monkeypatch.setattr(cli, "generate", fake_generate)
+
     def fake_verify(value: Path, repo: Path, *, performance_profile: str):
         result = next(verifications)
         (value / "production/verification.json").write_text(json.dumps(result))
@@ -257,9 +270,7 @@ def test_produce_resume_dry_run_starts_at_first_missing_phase(tmp_path: Path):
     analysis.parent.mkdir(parents=True, exist_ok=True)
     analysis.write_text('{"ok":true}', encoding="utf-8")
     identity = production_input_identity(project, cli.REPO)
-    write_phase_receipt(
-        project, step=1, input_identity=identity, artifacts=[analysis]
-    )
+    write_phase_receipt(project, step=1, input_identity=identity, artifacts=[analysis])
 
     result = cli.produce(
         project,

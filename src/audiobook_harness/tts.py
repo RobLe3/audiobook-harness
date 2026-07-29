@@ -18,6 +18,7 @@ from .pronunciation import (
     load_reviewed_lexicon,
 )
 from .selection_integrity import audit_candidate_selection
+from .review import build_review, review_is_approved
 from .context_protocol import protocol_for_unit
 
 SAMPLE_RATE = 24_000
@@ -37,8 +38,13 @@ def _source_hash(unit: dict[str, Any]) -> str:
         json.dumps(
             {
                 **{
-                k: unit.get(k)
-                for k in ("id", "text", "source_sentence_indexes", "context_strategy")
+                    k: unit.get(k)
+                    for k in (
+                        "id",
+                        "text",
+                        "source_sentence_indexes",
+                        "context_strategy",
+                    )
                 },
                 "context_protocol": protocol_for_unit(unit),
             },
@@ -242,8 +248,14 @@ def _package(
             "mp3": (".mp3", "libmp3lame", ["-b:a", "256k"]),
         }
         requested = config.get("outputs", ["m4a", "mp3"])
-        if not isinstance(requested, list) or not requested or any(value not in formats for value in requested):
-            raise ValueError("project.yaml outputs must contain one or more of: flac, m4a, mp3")
+        if (
+            not isinstance(requested, list)
+            or not requested
+            or any(value not in formats for value in requested)
+        ):
+            raise ValueError(
+                "project.yaml outputs must contain one or more of: flac, m4a, mp3"
+            )
         for suffix, codec, extra in (formats[str(value)] for value in requested):
             target = output / f"{chapter}_Audiobook{suffix}"
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -282,10 +294,17 @@ def _validated_ordered_takes(
     project: Path, rows: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     analysis = json.loads(
-        (project_paths(project)["production"] / "analysis.json").read_text(encoding="utf-8")
+        (project_paths(project)["production"] / "analysis.json").read_text(
+            encoding="utf-8"
+        )
     )
     expected = [
-        (str(unit["id"]), int(unit["chapter_index"]), int(unit["unit_index"]), int(unit["global_sequence"]))
+        (
+            str(unit["id"]),
+            int(unit["chapter_index"]),
+            int(unit["unit_index"]),
+            int(unit["global_sequence"]),
+        )
         for chapter in analysis["chapters"]
         for unit in chapter["units"]
     ]
@@ -301,9 +320,13 @@ def _validated_ordered_takes(
     if len(actual) != len(set(item[0] for item in actual)):
         raise RuntimeError("Cannot package: selected unit IDs are duplicated")
     if set(actual) != set(expected):
-        raise RuntimeError("Cannot package: selected units are missing, unexpected, or misidentified")
+        raise RuntimeError(
+            "Cannot package: selected units are missing, unexpected, or misidentified"
+        )
     ordered = sorted(rows, key=lambda row: int(row["global_sequence"]))
-    if [int(row["global_sequence"]) for row in ordered] != list(range(1, len(expected) + 1)):
+    if [int(row["global_sequence"]) for row in ordered] != list(
+        range(1, len(expected) + 1)
+    ):
         raise RuntimeError("Cannot package: selected unit sequence is discontinuous")
     return ordered
 
@@ -318,7 +341,11 @@ def _prepare_stage_directory(project: Path, output: Path | None) -> Path:
         Path(root.anchor),
         Path.home().resolve(),
         project,
-        *(path.resolve() for path in project_paths(project).values() if path != project_paths(project)["lexicon"]),
+        *(
+            path.resolve()
+            for path in project_paths(project).values()
+            if path != project_paths(project)["lexicon"]
+        ),
     }
     if root in protected or project.is_relative_to(root):
         raise RuntimeError(f"Unsafe staging output directory: {root}")
@@ -351,7 +378,9 @@ def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
     integrity = audit_candidate_selection(project, verification)
     if not integrity["ok"]:
         rules = ", ".join(str(row["rule"]) for row in integrity["errors"])
-        raise RuntimeError(f"Cannot package: candidate selection integrity failed: {rules}")
+        raise RuntimeError(
+            f"Cannot package: candidate selection integrity failed: {rules}"
+        )
     root = _prepare_stage_directory(project, output)
     outputs = _package(project, list(verification["takes"]), root)
     ordered_takes = _validated_ordered_takes(project, list(verification["takes"]))
@@ -380,15 +409,12 @@ def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
         ],
     }
     write_json(root / "stage-manifest.json", report)
-    write_json(
-        paths["production"] / "stage-manifest.json", report,
-    )
+    write_json(paths["production"] / "stage-manifest.json", report)
+    report["review"] = build_review(project, root)
     return report
 
 
-def stage_manifest_is_valid(
-    project: Path, stage_directory: Path | None = None
-) -> bool:
+def stage_manifest_is_valid(project: Path, stage_directory: Path | None = None) -> bool:
     paths = project_paths(project)
     stage_root = (stage_directory or project / "staging").resolve()
     try:
@@ -447,13 +473,16 @@ def promote(project: Path, stage_directory: Path | None = None) -> dict[str, Any
         )
     integrity = audit_candidate_selection(project, verification)
     integrity_path = paths["production"] / "candidate-selection-integrity.json"
-    if (
-        not integrity["ok"]
-        or manifest.get("candidate_selection_integrity_sha256") != sha256(integrity_path)
-    ):
+    if not integrity["ok"] or manifest.get(
+        "candidate_selection_integrity_sha256"
+    ) != sha256(integrity_path):
         raise RuntimeError("Cannot promote: candidate-selection integrity changed")
     if not stage_manifest_is_valid(project, stage_root):
         raise RuntimeError("Cannot promote: staged file set or media hashes changed")
+    if not review_is_approved(project):
+        raise RuntimeError(
+            "Cannot promote: finalized review approval is missing, stale, rejected, or uncertain"
+        )
     expected = manifest["expected_files"]
     rows = {
         str(row["file"]): row
@@ -478,7 +507,9 @@ def promote(project: Path, stage_directory: Path | None = None) -> dict[str, Any
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
         if sha256(target) != rows[str(relative)]["sha256"]:
-            raise RuntimeError(f"Cannot promote: copied media hash mismatch: {relative}")
+            raise RuntimeError(
+                f"Cannot promote: copied media hash mismatch: {relative}"
+            )
     shutil.rmtree(paths["deliverables"], ignore_errors=True)
     replacement.replace(paths["deliverables"])
     report = {**manifest, "state": "promoted", "promoted_files": expected}

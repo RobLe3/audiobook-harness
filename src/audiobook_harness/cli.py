@@ -19,6 +19,8 @@ from .resilience import (
 from .status import render_status, watch, write_run_status
 from .tts import generate, promote, stage, stage_manifest_is_valid
 from .run_journal import phase_receipt_is_valid, write_phase_receipt
+from .review import finalize_review, serve_review
+from .migration import apply_upgrade, upgrade_plan
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -346,6 +348,10 @@ def main() -> None:
     sub.add_parser("doctor")
     performance = sub.add_parser("performance")
     performance.add_argument("--profile", choices=("legacy", "auto"), default="legacy")
+    migrate = sub.add_parser("upgrade-project")
+    migrate.add_argument("project", type=Path)
+    migrate.add_argument("--apply", action="store_true")
+    migrate.add_argument("--inventory-sha256")
     new = sub.add_parser("new-project")
     new.add_argument("directory", type=Path)
     for name in (
@@ -358,6 +364,8 @@ def main() -> None:
         "promote",
         "produce",
         "status",
+        "review",
+        "finalize-review",
     ):
         command = sub.add_parser(name)
         command.add_argument("project", type=Path)
@@ -387,6 +395,11 @@ def main() -> None:
                 action="store_true",
                 help="With --resume, report reused and executed phases without mutation.",
             )
+        if name == "review":
+            command.add_argument("--host", default="127.0.0.1")
+            command.add_argument("--port", type=int, default=8765)
+        if name == "finalize-review":
+            command.add_argument("decisions", type=Path)
         if name == "status":
             command.add_argument("--watch", action="store_true")
     args = parser.parse_args()
@@ -395,6 +408,14 @@ def main() -> None:
         return
     if args.command == "performance":
         emit({"ok": True, "profile": resolve_profile(args.profile).as_dict()})
+        return
+    if args.command == "upgrade-project":
+        project = args.project.resolve()
+        emit(
+            apply_upgrade(project, args.inventory_sha256)
+            if args.apply
+            else upgrade_plan(project)
+        )
         return
     if args.command == "new-project":
         scaffold(args.directory.resolve(), REPO / "templates/project")
@@ -411,6 +432,13 @@ def main() -> None:
             watch(project)
         else:
             print(render_status(project))
+        return
+    if args.command == "review":
+        serve_review(project, args.host, args.port)
+        return
+    if args.command == "finalize-review":
+        value = json.loads(args.decisions.read_text(encoding="utf-8"))
+        emit(finalize_review(project, value.get("decisions", value)))
         return
     if args.command == "produce":
         emit(

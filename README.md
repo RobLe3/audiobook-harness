@@ -96,3 +96,7 @@ scripts/test-harness.sh
 It runs the unit tests and linting with the local virtual environment. If the
 already-built local smoke image is present, it also runs its model-free offline
 container check; it never pulls an image or downloads a model.
+
+## v0.4 review gate
+
+Version 0.4 writes source-preserving analysis contracts for structure, spoken forms, dialogue, prosody and TTS risk. After staging, run `audiobook-harness review PROJECT`, record decisions, and finalize them with `audiobook-harness finalize-review PROJECT decisions.json`. Promotion requires a finalized, manifest-bound approval set. Existing projects can inspect an upgrade with `audiobook-harness upgrade-project PROJECT`; applying it requires the reported inventory hash.
