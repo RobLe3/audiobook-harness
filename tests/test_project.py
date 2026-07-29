@@ -30,6 +30,12 @@ def test_normalized_words_treats_hyphenated_compounds_as_closed_words():
     ]
 
 
+def test_normalized_words_treats_en_and_em_dashes_as_boundaries():
+    assert normalized_words("alpha—beta gamma–delta") == [
+        "alpha", "beta", "gamma", "delta"
+    ]
+
+
 def test_analysis_blocks_unreviewed_terms(tmp_path: Path):
     template = Path(__file__).parents[1] / "templates/project"
     project = tmp_path / "book"
@@ -38,6 +44,20 @@ def test_analysis_blocks_unreviewed_terms(tmp_path: Path):
     report = analyze(project)
     assert report["release_blocked"]
     assert "Elias" in report["unresolved_lexicon_candidates"]
+
+
+def test_analysis_ignores_only_ordinary_sentence_starters(tmp_path: Path):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    (project / "source/chapter-01.txt").write_text(
+        "The door opened. After midnight, Elias arrived."
+    )
+    report = analyze(project)
+    unresolved = report["unresolved_lexicon_candidates"]
+    assert "The" not in unresolved
+    assert "After" not in unresolved
+    assert "Elias" in unresolved
 
 
 def test_pronunciation_audit_requires_reviewed_phonemes(tmp_path: Path):
@@ -138,3 +158,28 @@ def test_retry_variants_extend_the_initial_bounded_set():
     assert {name for name, _ in RETRY_VARIANTS}.issuperset(
         {"retry_slower", "retry_faster"}
     )
+
+
+def test_candidate_identity_changes_with_model_and_voice_assets():
+    from audiobook_harness.tts import _candidate_identity
+
+    values = {
+        "name": "baseline",
+        "phonemes": "test",
+        "source_hash": "source",
+        "context_protocol": {"version": 1},
+        "voice": "voice",
+        "speed": 0.95,
+        "engine_identity": {
+            "model_sha256": "model-a",
+            "voices_sha256": "voices-a",
+            "kokoro_onnx_version": "1",
+            "synthesis_contract_version": 2,
+        },
+    }
+    baseline = _candidate_identity(**values)
+    changed = {
+        **values,
+        "engine_identity": {**values["engine_identity"], "model_sha256": "model-b"},
+    }
+    assert baseline != _candidate_identity(**changed)

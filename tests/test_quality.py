@@ -1,4 +1,8 @@
-from audiobook_harness.quality import _alignment_complete, _mfa_profile
+from audiobook_harness.quality import (
+    _alignment_complete,
+    _finalize_verification_integrity,
+    _mfa_profile,
+)
 
 
 def test_mfa_profile_defaults_to_explicit_english_models():
@@ -18,7 +22,30 @@ def test_alignment_evidence_requires_every_take(tmp_path):
     (tmp_path / "one.json").write_text("{}")
     ok, missing = _alignment_complete(tmp_path, [{"id": "one"}, {"id": "two"}])
     assert not ok
-    assert missing == ["two"]
+    assert missing == ["one", "two"]
+
+
+def test_alignment_evidence_requires_matching_plausible_word_intervals(tmp_path):
+    (tmp_path / "one.json").write_text(
+        '{"tiers":{"words":{"entries":[[0.0,0.3,"Hello"],[0.4,0.8,"world"]]}}}'
+    )
+    take = {"id": "one", "text": "Hello world.", "duration_seconds": 1.0}
+    assert _alignment_complete(tmp_path, [take]) == (True, [])
+    (tmp_path / "one.json").write_text(
+        '{"tiers":{"words":{"entries":[[0.0,2.0,"Wrong"]]}}}'
+    )
+    assert _alignment_complete(tmp_path, [take]) == (False, ["one"])
+
+
+def test_selection_integrity_failure_changes_top_level_verification(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        "audiobook_harness.quality.audit_candidate_selection",
+        lambda project, report: {"ok": False, "errors": [{"rule": "changed"}]},
+    )
+    report = _finalize_verification_integrity(tmp_path, {"ok": True})
+    assert report["ok"] is False
 
 
 def test_term_equivalence_is_applied_with_audit_evidence():

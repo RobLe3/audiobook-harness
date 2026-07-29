@@ -17,7 +17,7 @@ from .resilience import (
     terminal_signatures,
 )
 from .status import render_status, watch, write_run_status
-from .tts import assemble, generate, promote, stage
+from .tts import generate, promote, stage, stage_manifest_is_valid
 from .run_journal import phase_receipt_is_valid, write_phase_receipt
 
 REPO = Path(__file__).resolve().parents[2]
@@ -149,9 +149,12 @@ def produce(
     first_step = 1
     if resume:
         for step in range(1, len(PRODUCTION_STEPS) + 1):
-            if not phase_receipt_is_valid(
+            receipt_valid = phase_receipt_is_valid(
                 project, step=step, input_identity=input_identity
-            ):
+            )
+            if step == 5 and receipt_valid:
+                receipt_valid = stage_manifest_is_valid(project, output)
+            if not receipt_valid:
                 first_step = step
                 break
         else:
@@ -360,6 +363,8 @@ def main() -> None:
         command.add_argument("project", type=Path)
         if name == "stage":
             command.add_argument("--output", type=Path)
+        if name == "promote":
+            command.add_argument("--from", dest="stage_directory", type=Path)
         if name == "verify":
             command.add_argument(
                 "--performance-profile", choices=("legacy", "auto"), default="legacy"
@@ -396,6 +401,11 @@ def main() -> None:
         emit({"ok": True, "project": str(args.directory.resolve())})
         return
     project = args.project.resolve()
+    if args.command == "release":
+        parser.error(
+            "release no longer writes directly to deliverables; use stage, review the "
+            "staged audio, then promote"
+        )
     if args.command == "status":
         if args.watch:
             watch(project)
@@ -421,9 +431,8 @@ def main() -> None:
         "verify": lambda: verify(
             project, REPO, performance_profile=args.performance_profile
         ),
-        "release": lambda: assemble(project),
         "stage": lambda: stage(project, args.output),
-        "promote": lambda: promote(project),
+        "promote": lambda: promote(project, args.stage_directory),
     }
     emit(_run(project, args.command, actions[args.command]))
 

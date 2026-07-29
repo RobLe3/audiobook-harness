@@ -1,6 +1,6 @@
 CHECKPOINT 4 / 8  ::  COMPARE EVERY SPOKEN WORD
 
-  [████····]  two independent local ASR passes
+  [████····]  two local Whisper checkpoints
 
   candidate audio  ->  Whisper A  --\
                                       +--> expected text

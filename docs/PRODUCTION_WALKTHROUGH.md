@@ -11,7 +11,7 @@ verified takes, and promote a release only after its evidence is complete.
    real neighbouring manuscript text for terse replies.
 3. **Generate bounded alternatives** — Kokoro creates small, reproducible takes
    instead of one long, unreviewable request.
-4. **Compare the spoken words** — two independent local speech-to-text passes
+4. **Compare the spoken words** — two local Whisper checkpoints
    compare the audio with the approved text.
 5. **Check and align the recording** — reject clipping, abnormal duration and
    unexpected silence, then use local forced alignment to confirm word timing.
@@ -35,7 +35,7 @@ explain what the milestones protect.
 | Checkpoint | Main evidence | Blocking decision |
 | --- | --- | --- |
 | Read and plan | `production/analysis.json`, reviewed pronunciation data | Unknown terms or unsafe terse dialogue require review. |
-| Generate | `production/candidates.json`, content-addressed FLAC takes | Only bounded candidates enter verification. |
+| Generate | `production/candidates.json`, input-addressed and waveform-hashed FLAC takes | Only bounded candidates enter verification. |
 | Compare words | `production/asr-evidence-cache.json`, `verification.json` | Both local ASR passes must meet the configured text-fidelity limit. |
 | Check and align | per-candidate acoustic results, `production/forced-alignment.json`, `production/mfa/aligned/` | Malformed audio or incomplete timing evidence rejects a take. |
 | Select or repair | `production/verification.json`, selection-integrity audit and input-bound recovery signature | Only failed units receive one bounded repair; a repeated terminal result stops. |

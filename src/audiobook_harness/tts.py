@@ -4,6 +4,7 @@ import json
 import shutil
 import subprocess
 import hashlib
+import importlib.metadata
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,8 @@ from .context_protocol import protocol_for_unit
 SAMPLE_RATE = 24_000
 VARIANTS = (("baseline", 0.0), ("slower", -0.01), ("faster", 0.01))
 RETRY_VARIANTS = VARIANTS + (("retry_slower", -0.02), ("retry_faster", 0.02))
+SYNTHESIS_CONTRACT_VERSION = 2
+STAGE_MARKER = ".audiobook-harness-stage.json"
 
 
 def model_paths(repo: Path) -> tuple[Path, Path]:
@@ -37,6 +40,32 @@ def _source_hash(unit: dict[str, Any]) -> str:
             },
             sort_keys=True,
         ).encode()
+    ).hexdigest()
+
+
+def _candidate_identity(
+    *,
+    name: str,
+    phonemes: str,
+    source_hash: str,
+    context_protocol: dict[str, Any],
+    voice: str,
+    speed: float,
+    engine_identity: dict[str, Any],
+) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            {
+                "candidate": name,
+                "phonemes": phonemes,
+                "source_hash": source_hash,
+                "context_protocol": context_protocol,
+                "voice": voice,
+                "speed": speed,
+                **engine_identity,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
     ).hexdigest()
 
 
@@ -70,6 +99,12 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
         str(config.get("language", "en-gb")),
     )
     engine, lexicon = Kokoro(str(model), str(voices)), load_reviewed_lexicon(project)
+    engine_identity = {
+        "model_sha256": sha256(model),
+        "voices_sha256": sha256(voices),
+        "kokoro_onnx_version": importlib.metadata.version("kokoro-onnx"),
+        "synthesis_contract_version": SYNTHESIS_CONTRACT_VERSION,
+    }
     candidates: list[dict[str, Any]] = []
     for chapter in analysis["chapters"]:
         for unit in chapter["units"]:
@@ -98,19 +133,15 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
                     raise RuntimeError(
                         f"Expected {SAMPLE_RATE} Hz output, received {rate}"
                     )
-                candidate_identity = hashlib.sha256(
-                    json.dumps(
-                        {
-                            "candidate": name,
-                            "phonemes": phonemes,
-                            "source_hash": source_hash,
-                            "context_protocol": context_protocol,
-                            "voice": voice,
-                            "speed": actual_speed,
-                        },
-                        sort_keys=True,
-                    ).encode("utf-8")
-                ).hexdigest()
+                candidate_identity = _candidate_identity(
+                    name=name,
+                    phonemes=phonemes,
+                    source_hash=source_hash,
+                    context_protocol=context_protocol,
+                    voice=voice,
+                    speed=actual_speed,
+                    engine_identity=engine_identity,
+                )
                 target = (
                     paths["assets"]
                     / "candidates"
@@ -138,6 +169,7 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
                         "file": str(target.relative_to(project)),
                         "sha256": sha256(target),
                         "source_hash": source_hash,
+                        **engine_identity,
                         "source_sentence_indexes": unit.get(
                             "source_sentence_indexes", []
                         ),
@@ -214,19 +246,52 @@ def _package(
                 check=True,
             )
             files.append(
-                {"file": str(target.relative_to(project)), "sha256": sha256(target)}
+                {
+                    "file": str(target.relative_to(output)),
+                    "sha256": sha256(target),
+                    "bytes": target.stat().st_size,
+                }
             )
         outputs.append({"chapter": chapter, "files": files})
     return outputs
 
 
-def assemble(project: Path) -> dict[str, Any]:
-    return stage(project, project_paths(project)["deliverables"], direct=True)
+def _prepare_stage_directory(project: Path, output: Path | None) -> Path:
+    requested = output or project / "staging"
+    if requested.is_symlink():
+        raise RuntimeError("Cannot stage into a symbolic link")
+    root = requested.resolve()
+    project = project.resolve()
+    protected = {
+        Path(root.anchor),
+        Path.home().resolve(),
+        project,
+        *(path.resolve() for path in project_paths(project).values() if path != project_paths(project)["lexicon"]),
+    }
+    if root in protected or project.is_relative_to(root):
+        raise RuntimeError(f"Unsafe staging output directory: {root}")
+    marker = root / STAGE_MARKER
+    if root.exists():
+        children = list(root.iterdir())
+        if children:
+            try:
+                ownership = json.loads(marker.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                raise RuntimeError(
+                    "Refusing to replace a non-empty directory not owned by Audiobook Harness"
+                ) from None
+            if ownership.get("project") != str(project):
+                raise RuntimeError("Staging directory belongs to a different project")
+            shutil.rmtree(root)
+    root.mkdir(parents=True, exist_ok=True)
+    write_json(
+        marker,
+        {"version": 1, "owner": "audiobook-harness", "project": str(project)},
+    )
+    return root
 
 
-def stage(
-    project: Path, output: Path | None = None, *, direct: bool = False
-) -> dict[str, Any]:
+def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
     paths = project_paths(project)
     verification = json.loads((paths["production"] / "verification.json").read_text())
     if not verification.get("ok"):
@@ -235,31 +300,79 @@ def stage(
     if not integrity["ok"]:
         rules = ", ".join(str(row["rule"]) for row in integrity["errors"])
         raise RuntimeError(f"Cannot package: candidate selection integrity failed: {rules}")
-    root = (output or project / "staging").resolve()
-    shutil.rmtree(root, ignore_errors=True)
-    root.mkdir(parents=True, exist_ok=True)
+    root = _prepare_stage_directory(project, output)
     outputs = _package(project, list(verification["takes"]), root)
+    expected_files = sorted(
+        str(row["file"]) for chapter in outputs for row in chapter["files"]
+    )
     report = {
-        "version": 1,
-        "state": "direct_release" if direct else "staged",
+        "version": 2,
+        "state": "staged",
         "verification_sha256": sha256(paths["production"] / "verification.json"),
         "candidate_selection_integrity_sha256": sha256(
             paths["production"] / "candidate-selection-integrity.json"
         ),
         "outputs": outputs,
+        "expected_files": expected_files,
     }
     write_json(root / "stage-manifest.json", report)
     write_json(
-        paths["production"]
-        / ("release-manifest.json" if direct else "stage-manifest.json"),
-        report,
+        paths["production"] / "stage-manifest.json", report,
     )
     return report
 
 
-def promote(project: Path) -> dict[str, Any]:
+def stage_manifest_is_valid(
+    project: Path, stage_directory: Path | None = None
+) -> bool:
     paths = project_paths(project)
-    stage_root = project / "staging"
+    stage_root = (stage_directory or project / "staging").resolve()
+    try:
+        manifest = json.loads(
+            (stage_root / "stage-manifest.json").read_text(encoding="utf-8")
+        )
+        production_manifest = json.loads(
+            (paths["production"] / "stage-manifest.json").read_text(encoding="utf-8")
+        )
+        verification_hash = sha256(paths["production"] / "verification.json")
+        integrity_hash = sha256(
+            paths["production"] / "candidate-selection-integrity.json"
+        )
+    except (OSError, json.JSONDecodeError):
+        return False
+    if (
+        manifest != production_manifest
+        or manifest.get("verification_sha256") != verification_hash
+        or manifest.get("candidate_selection_integrity_sha256") != integrity_hash
+    ):
+        return False
+    expected = manifest.get("expected_files")
+    if not isinstance(expected, list) or not expected:
+        return False
+    expected_names = sorted(str(value) for value in expected)
+    actual = sorted(
+        str(path.relative_to(stage_root))
+        for path in stage_root.rglob("*")
+        if path.is_file() and path.name not in {STAGE_MARKER, "stage-manifest.json"}
+    )
+    if actual != expected_names:
+        return False
+    rows = {
+        str(row.get("file")): row
+        for chapter in manifest.get("outputs", [])
+        for row in chapter.get("files", [])
+    }
+    return set(rows) == set(expected_names) and all(
+        (stage_root / name).is_file()
+        and (stage_root / name).stat().st_size == rows[name].get("bytes")
+        and sha256(stage_root / name) == rows[name].get("sha256")
+        for name in expected_names
+    )
+
+
+def promote(project: Path, stage_directory: Path | None = None) -> dict[str, Any]:
+    paths = project_paths(project)
+    stage_root = (stage_directory or project / "staging").resolve()
     manifest = json.loads((stage_root / "stage-manifest.json").read_text())
     verification = json.loads((paths["production"] / "verification.json").read_text())
     if not verification.get("ok") or manifest.get("verification_sha256") != sha256(
@@ -268,12 +381,43 @@ def promote(project: Path) -> dict[str, Any]:
         raise RuntimeError(
             "Cannot promote: staged batch is stale or verification failed"
         )
+    integrity = audit_candidate_selection(project, verification)
+    integrity_path = paths["production"] / "candidate-selection-integrity.json"
+    if (
+        not integrity["ok"]
+        or manifest.get("candidate_selection_integrity_sha256") != sha256(integrity_path)
+    ):
+        raise RuntimeError("Cannot promote: candidate-selection integrity changed")
+    if not stage_manifest_is_valid(project, stage_root):
+        raise RuntimeError("Cannot promote: staged file set or media hashes changed")
+    expected = manifest["expected_files"]
+    rows = {
+        str(row["file"]): row
+        for chapter in manifest.get("outputs", [])
+        for row in chapter.get("files", [])
+    }
+    for relative in expected:
+        path = stage_root / str(relative)
+        row = rows.get(str(relative), {})
+        if (
+            not path.is_file()
+            or path.stat().st_size != row.get("bytes")
+            or sha256(path) != row.get("sha256")
+        ):
+            raise RuntimeError(f"Cannot promote: staged media changed: {relative}")
     replacement = project / "deliverables.next"
     shutil.rmtree(replacement, ignore_errors=True)
-    shutil.copytree(stage_root, replacement)
-    (replacement / "stage-manifest.json").unlink(missing_ok=True)
+    replacement.mkdir(parents=True)
+    for relative in expected:
+        source = stage_root / str(relative)
+        target = replacement / str(relative)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        if sha256(target) != rows[str(relative)]["sha256"]:
+            raise RuntimeError(f"Cannot promote: copied media hash mismatch: {relative}")
     shutil.rmtree(paths["deliverables"], ignore_errors=True)
     replacement.replace(paths["deliverables"])
-    report = {**manifest, "state": "promoted"}
+    report = {**manifest, "state": "promoted", "promoted_files": expected}
+    write_json(paths["deliverables"] / "promotion-receipt.json", report)
     write_json(paths["production"] / "release-manifest.json", report)
     return report

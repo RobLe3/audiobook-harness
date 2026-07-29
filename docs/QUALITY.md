@@ -8,13 +8,15 @@ published directly.
 ## Candidate selection
 
 Each semantic performance unit receives a small fixed set of pace variants. Two
-independent local Whisper passes, acoustic checks, and local MFA alignment decide
+local Whisper checkpoints, acoustic checks, and local MFA alignment decide
 whether a candidate may be selected. The selected file, source-unit hash, audio
 hash, transcripts, and checks are recorded in `production/verification.json`.
 Selection is also bound to the hash of `production/candidates.json`; before
 packaging, the harness confirms that the selected audio still has the recorded
 bytes and still corresponds to a current candidate-manifest entry. Candidate
-files use content-addressed names, so a later retry cannot silently replace a
+files use input-addressed names bound to the model, voices asset, engine version,
+synthesis contract, source and performance settings. The completed waveform hash
+is the authoritative byte identity, so a later retry cannot silently replace a
 waveform that was already verified.
 
 ASR evidence is cached locally only when the complete evidence identity matches:
@@ -84,8 +86,13 @@ remain explicit project-local lexicon entries.
 ## Staging and promotion
 
 `stage` writes all verified deliverables and a hash-bound manifest beneath the
-project staging directory. `promote` checks that verification has not changed and
-then replaces the project deliverables atomically. `status --watch` displays the
+project staging directory. It replaces only an empty directory or a directory
+carrying an ownership marker for the same project; dangerous and unrelated
+directories are rejected. `promote` recalculates the exact staged file set,
+hashes, byte counts, verification evidence, and candidate-selection integrity,
+then verifies the copied bytes before replacing project deliverables atomically.
+For a custom stage, use `promote <project> --from <stage-directory>`. The legacy
+direct `release` command is disabled. `status --watch` displays the
 JSON lifecycle state and its readable Markdown progress view. The progress
 contract carries its source timestamp and the PID of the production command.
 If that command is gone, a previously `running` snapshot is marked interrupted;

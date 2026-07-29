@@ -140,21 +140,66 @@ def _ffmpeg_wav(source: Path, destination: Path) -> None:
 def _alignment_complete(
     aligned: Path, takes: list[dict[str, Any]]
 ) -> tuple[bool, list[str]]:
-    """A successful MFA exit alone is insufficient: every take needs JSON evidence."""
-    missing: list[str] = []
+    """Require complete, plausible word-tier evidence for every selected take."""
+    failed: list[str] = []
     for take in takes:
         candidate = aligned / f"{take['id']}.json"
         if not candidate.is_file():
-            missing.append(str(take["id"]))
+            failed.append(str(take["id"]))
             continue
         try:
             payload = json.loads(candidate.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            missing.append(str(take["id"]))
+            failed.append(str(take["id"]))
             continue
-        if not isinstance(payload, (dict, list)):
-            missing.append(str(take["id"]))
-    return not missing, missing
+        entries: object = None
+        if isinstance(payload, dict):
+            tiers = payload.get("tiers")
+            if isinstance(tiers, dict):
+                words = tiers.get("words")
+                entries = words.get("entries") if isinstance(words, dict) else words
+            entries = entries if entries is not None else payload.get("words")
+        elif isinstance(payload, list):
+            entries = payload
+        if not isinstance(entries, list) or not entries:
+            failed.append(str(take["id"]))
+            continue
+        intervals: list[tuple[float, float, str]] = []
+        for entry in entries:
+            try:
+                if isinstance(entry, dict):
+                    begin = float(entry.get("begin", entry.get("start")))
+                    end = float(entry.get("end", entry.get("stop")))
+                    label = str(entry.get("label", entry.get("text", entry.get("word", ""))))
+                elif isinstance(entry, list) and len(entry) >= 3:
+                    begin, end, label = float(entry[0]), float(entry[1]), str(entry[2])
+                else:
+                    raise ValueError
+            except (TypeError, ValueError):
+                intervals = []
+                break
+            if label.strip() and label.casefold() not in {"<eps>", "sil", "sp"}:
+                intervals.append((begin, end, label))
+        observed = [
+            word
+            for _begin, _end, label in intervals
+            for word in normalized_words(label)
+        ]
+        expected = normalized_words(str(take.get("text", "")))
+        duration = float(take.get("duration_seconds", 0.0))
+        invalid_intervals = any(
+            begin < 0
+            or end <= begin
+            or end - begin > 1.5
+            or (duration > 0 and end > duration + 0.1)
+            or (index > 0 and begin < intervals[index - 1][1])
+            or (index > 0 and begin - intervals[index - 1][1] > 2.0)
+            for index, (begin, end, _label) in enumerate(intervals)
+        )
+        error = Levenshtein.distance(expected, observed) / max(1, len(expected))
+        if not intervals or invalid_intervals or error > 0.01:
+            failed.append(str(take["id"]))
+    return not failed, failed
 
 
 def _transient_alignment_failure(text: str) -> bool:
@@ -303,6 +348,14 @@ def _acoustic_checks(mono: np.ndarray, rate: int, words: int) -> list[str]:
     return failures
 
 
+def _finalize_verification_integrity(
+    project: Path, report: dict[str, Any]
+) -> dict[str, Any]:
+    report["candidate_selection_integrity"] = audit_candidate_selection(project, report)
+    report["ok"] = bool(report["ok"] and report["candidate_selection_integrity"]["ok"])
+    return report
+
+
 def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") -> dict[str, Any]:
     import whisper
 
@@ -438,6 +491,6 @@ def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") ->
         },
     }
     write_json(paths["production"] / "verification.json", report)
-    report["candidate_selection_integrity"] = audit_candidate_selection(project, report)
+    _finalize_verification_integrity(project, report)
     write_json(paths["production"] / "verification.json", report)
     return report

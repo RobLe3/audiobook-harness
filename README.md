@@ -2,7 +2,7 @@
 
 A local-first, evidence-based audiobook production harness for coding agents.
 It focuses on manuscript analysis, pronunciation control, contextual dialogue,
-Kokoro TTS, independent local speech verification, forced alignment, and reproducible
+Kokoro TTS, dual-checkpoint local Whisper verification, forced alignment, and reproducible
 M4A/MP3 delivery with staged promotion.
 
 Reviewed decoder-spelling equivalences are supported for protected names and
@@ -57,7 +57,7 @@ invalid phase:
 .venv/bin/audiobook-harness produce projects/my-book --resume --performance-profile auto
 ```
 
-Verified earlier phases and matching content-addressed audio are retained.
+Verified earlier phases and matching input-addressed, waveform-hashed audio are retained.
 
 On Windows, use `.venv\\Scripts\\audiobook-harness.exe` instead.
 

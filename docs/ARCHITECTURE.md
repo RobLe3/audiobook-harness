@@ -43,7 +43,7 @@ input or harness change produces a different identity.
 `produce --resume --dry-run` validates the input-bound receipt for each
 completed phase and reports `REUSE` or `RUN` before loading a model or changing
 media. `produce --resume` then starts at the first missing, changed, or
-unverified phase. Earlier valid phases and content-addressed candidate audio
+unverified phase. Earlier valid phases and input-addressed, waveform-hashed candidate audio
 remain in place.
 
 A receipt binds the production input identity and exact artifact hashes.

@@ -5,6 +5,6 @@ CHECKPOINT 3 / 8  ::  GENERATE BOUNDED CANDIDATES
   semantic unit + voice + pace + phonemes
                        |
                        v
-          small content-addressed FLAC candidates
+          small input-addressed, waveform-hashed FLAC candidates
 
 No long paragraph request becomes release audio by default.

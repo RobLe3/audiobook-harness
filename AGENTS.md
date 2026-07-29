@@ -7,12 +7,16 @@ Use the local staged workflow only:
 3. `audiobook-harness analyze <project>`
 4. `audiobook-harness generate <project>`
 5. `audiobook-harness verify <project>`
-6. `audiobook-harness release <project>`
+6. Listen to the staged media.
+7. `audiobook-harness promote <project>`
 
 For an unattended staged run, use `audiobook-harness produce <project>`. It
 runs the same gates, permits at most one failed-unit candidate repair, and
 never promotes automatically. Do not bypass its input-bound recovery ledger or
 convert a quality rejection into a generic process retry.
+
+The legacy `release` command is intentionally disabled because direct publication
+bypasses staged review. Never write generated media directly to `deliverables/`.
 
 Do not publish audio directly from TTS. Generate bounded semantic takes, verify
 with two local ASR passes and MFA, and reject or retry failures. Keep names,

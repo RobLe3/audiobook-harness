@@ -15,6 +15,13 @@ from .project import (
 ACRONYM = re.compile(r"\b(?:[A-Z]{2,}|(?:[A-Z]\.){2,})\b")
 NUMBER = re.compile(r"\b\d+(?:[.,/]\d+)*\b")
 FOREIGN_OR_NAME = re.compile(r"\b[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'’-]+\b")
+ORDINARY_SENTENCE_STARTERS = {
+    "a", "after", "although", "an", "and", "as", "at", "before", "but",
+    "during", "for", "he", "her", "his", "however", "i", "if", "in", "it",
+    "its", "later", "meanwhile", "on", "or", "she", "so", "that", "the",
+    "their", "then", "there", "these", "they", "this", "those", "to", "we",
+    "when", "where", "while", "who", "with", "yet", "you",
+}
 
 
 def analyze(project: Path) -> dict[str, Any]:
@@ -38,7 +45,14 @@ def analyze(project: Path) -> dict[str, Any]:
             ("numbers", NUMBER),
             ("names_or_foreign", FOREIGN_OR_NAME),
         ):
-            vocabulary[name].update(pattern.findall(text))
+            found = pattern.findall(text)
+            if name == "names_or_foreign":
+                found = [
+                    value
+                    for value in found
+                    if value.casefold() not in ORDINARY_SENTENCE_STARTERS
+                ]
+            vocabulary[name].update(found)
         for index, unit in enumerate(units, 1):
             if bool(unit.get("requires_context_review", False)):
                 contextual_review_units.append(f"{source.stem}-{index:04d}")
