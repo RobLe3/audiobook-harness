@@ -7,7 +7,7 @@ name = "audiobook-harness"
 version = "0.3.0"
 description = "Local-first, evidence-based audiobook production with Kokoro."
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.12,<3.13"
 license = {text = "Apache-2.0"}
 authors = [{name = "Audiobook Harness contributors"}]
 dependencies = [
