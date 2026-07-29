@@ -1,6 +1,6 @@
 # Setup
 
-Requires Python 3.11 or 3.12 and a supported desktop operating system.
+Requires Python 3.12 and a supported desktop operating system.
 
 `python scripts/setup.py --interactive` asks before installing system packages,
 the optional ASR verification stack plus pinned model weights, or MFA. The core

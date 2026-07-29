@@ -6,7 +6,7 @@ fallbacks.
 
 ## What you will need
 
-- macOS, Linux, or Windows; Python 3.11 or 3.12.
+- macOS, Linux, or Windows; Python 3.12.
 - FFmpeg/FFprobe and eSpeak NG.
 - A local disk with roughly 8–12 GB free for the first English setup (Kokoro,
   two Whisper models, MFA, temporary WAVs, and your outputs).
