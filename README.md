@@ -49,6 +49,16 @@ python scripts/setup.py --interactive
 .venv/bin/audiobook-harness promote projects/my-book
 ```
 
+After an interruption, inspect the exact reuse plan and continue from the first
+invalid phase:
+
+```bash
+.venv/bin/audiobook-harness produce projects/my-book --resume --dry-run
+.venv/bin/audiobook-harness produce projects/my-book --resume --performance-profile auto
+```
+
+Verified earlier phases and matching content-addressed audio are retained.
+
 On Windows, use `.venv\\Scripts\\audiobook-harness.exe` instead.
 
 ## Choose your depth

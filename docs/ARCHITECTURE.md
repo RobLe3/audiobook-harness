@@ -38,6 +38,20 @@ lock and harness code. A terminal signature is stored in
 will not repeat a repair that has already ended with the same rejection. A real
 input or harness change produces a different identity.
 
+## Interruption-safe phase reuse
+
+`produce --resume --dry-run` validates the input-bound receipt for each
+completed phase and reports `REUSE` or `RUN` before loading a model or changing
+media. `produce --resume` then starts at the first missing, changed, or
+unverified phase. Earlier valid phases and content-addressed candidate audio
+remain in place.
+
+A receipt binds the production input identity and exact artifact hashes.
+Changed manuscript, configuration, lexicon, model lock, harness code, or
+artifact bytes invalidate the affected phase and its downstream evidence. An
+interruption never triggers a clean project restart. Candidate repair still
+regenerates only the failed unit IDs, and no quality threshold is relaxed.
+
 Staging is the end of unattended authority. Promotion remains a separate
 command so the listener can inspect the verification report and staged audio
 before replacing deliverables.

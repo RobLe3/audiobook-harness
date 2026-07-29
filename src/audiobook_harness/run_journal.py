@@ -28,6 +28,68 @@ def append_event(path: Path, event: dict[str, Any]) -> None:
         os.fsync(handle.fileno())
 
 
+def phase_receipt_path(project: Path, step: int) -> Path:
+    return project / "production/phase-receipts" / f"step-{step}.json"
+
+
+def write_phase_receipt(
+    project: Path,
+    *,
+    step: int,
+    input_identity: str,
+    artifacts: list[Path],
+) -> dict[str, Any]:
+    """Checkpoint one completed production phase and its exact output bytes."""
+
+    missing = [str(path) for path in artifacts if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(f"phase {step} is missing checkpoint artifacts: {missing}")
+    receipt = {
+        "version": 1,
+        "step": step,
+        "input_identity": input_identity,
+        "artifacts": [
+            {
+                "path": str(path.relative_to(project)),
+                "sha256": sha256(path),
+                "bytes": path.stat().st_size,
+            }
+            for path in artifacts
+        ],
+    }
+    write_json(phase_receipt_path(project, step), receipt)
+    return receipt
+
+
+def phase_receipt_is_valid(
+    project: Path, *, step: int, input_identity: str
+) -> bool:
+    """Accept reuse only when identity and every checkpointed byte still match."""
+
+    try:
+        receipt = json.loads(
+            phase_receipt_path(project, step).read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError):
+        return False
+    if (
+        receipt.get("step") != step
+        or receipt.get("input_identity") != input_identity
+        or not isinstance(receipt.get("artifacts"), list)
+        or not receipt["artifacts"]
+    ):
+        return False
+    for row in receipt["artifacts"]:
+        path = project / str(row.get("path", ""))
+        if (
+            not path.is_file()
+            or path.stat().st_size != row.get("bytes")
+            or sha256(path) != row.get("sha256")
+        ):
+            return False
+    return True
+
+
 def write_stage_receipt(
     path: Path, *, run_id: str, chapter_id: str, quality_report: Path, media: list[Path],
     dependency_fingerprint: str | None = None,

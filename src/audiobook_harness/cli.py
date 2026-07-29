@@ -18,6 +18,7 @@ from .resilience import (
 )
 from .status import render_status, watch, write_run_status
 from .tts import assemble, generate, promote, stage
+from .run_journal import phase_receipt_is_valid, write_phase_receipt
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -128,6 +129,8 @@ def produce(
     output: Path | None,
     performance_profile: str,
     maximum_candidate_retries: int,
+    resume: bool = False,
+    dry_run: bool = False,
 ) -> dict[str, object]:
     """Run a staged local production with one evidence-bound repair loop."""
     production = project / "production"
@@ -136,6 +139,37 @@ def produce(
     previous_signatures = terminal_signatures(ledger)
     retries = 0
     phase_index = 0
+    phase_artifacts = {
+        1: [production / "analysis.json"],
+        2: [production / "candidates.json", production / "generation.json"],
+        3: [production / "verification.json", production / "forced-alignment.json"],
+        4: [production / "verification.json"],
+        5: [production / "stage-manifest.json"],
+    }
+    first_step = 1
+    if resume:
+        for step in range(1, len(PRODUCTION_STEPS) + 1):
+            if not phase_receipt_is_valid(
+                project, step=step, input_identity=input_identity
+            ):
+                first_step = step
+                break
+        else:
+            first_step = len(PRODUCTION_STEPS) + 1
+    if dry_run:
+        return {
+            "ok": True,
+            "dry_run": True,
+            "input_identity": input_identity,
+            "phases": [
+                {
+                    "step": step,
+                    "name": name,
+                    "action": "REUSE" if step < first_step else "RUN",
+                }
+                for step, name in enumerate(PRODUCTION_STEPS, 1)
+            ],
+        }
 
     def progress(index: int, phase: str) -> None:
         write_run_status(
@@ -151,20 +185,51 @@ def produce(
 
     try:
         phase_index = 0
-        progress(0, PRODUCTION_STEPS[0])
-        analysis = analyze(project)
+        if first_step <= 1:
+            progress(0, PRODUCTION_STEPS[0])
+            analysis = analyze(project)
+            write_phase_receipt(
+                project,
+                step=1,
+                input_identity=input_identity,
+                artifacts=phase_artifacts[1],
+            )
+        else:
+            analysis = json.loads(phase_artifacts[1][0].read_text(encoding="utf-8"))
         phase_index = 1
-        progress(1, PRODUCTION_STEPS[1])
-        generation = generate(project, REPO)
+        if first_step <= 2:
+            progress(1, PRODUCTION_STEPS[1])
+            generation = generate(project, REPO)
+            write_phase_receipt(
+                project,
+                step=2,
+                input_identity=input_identity,
+                artifacts=phase_artifacts[2],
+            )
+        else:
+            generation = json.loads(
+                (production / "candidates.json").read_text(encoding="utf-8")
+            )
         phase_index = 2
-        progress(2, PRODUCTION_STEPS[2])
-        verification = verify(
-            project,
-            REPO,
-            performance_profile=performance_profile,
-        )
+        if first_step <= 3:
+            progress(2, PRODUCTION_STEPS[2])
+            verification = verify(
+                project,
+                REPO,
+                performance_profile=performance_profile,
+            )
+            write_phase_receipt(
+                project,
+                step=3,
+                input_identity=input_identity,
+                artifacts=phase_artifacts[3],
+            )
+        else:
+            verification = json.loads(
+                (production / "verification.json").read_text(encoding="utf-8")
+            )
         failures = [str(item) for item in verification.get("failures", [])]
-        if not verification.get("ok"):
+        if first_step <= 4 and not verification.get("ok"):
             phase_index = 3
             progress(phase_index, PRODUCTION_STEPS[phase_index])
             decision = decide_candidate_retry(
@@ -202,9 +267,42 @@ def produce(
                     "Verification remains blocked; inspect production/verification.json. "
                     f"Automatic recovery stopped: {terminal['reason']}."
                 )
+        if first_step <= 4:
+            # A bounded repair rewrites both candidates and verification.
+            # Refresh their owning receipts so a later resume sees the final
+            # verified bytes rather than the pre-repair rejection.
+            write_phase_receipt(
+                project,
+                step=2,
+                input_identity=input_identity,
+                artifacts=phase_artifacts[2],
+            )
+            write_phase_receipt(
+                project,
+                step=3,
+                input_identity=input_identity,
+                artifacts=phase_artifacts[3],
+            )
+            write_phase_receipt(
+                project,
+                step=4,
+                input_identity=input_identity,
+                artifacts=phase_artifacts[4],
+            )
         phase_index = 4
-        progress(phase_index, PRODUCTION_STEPS[phase_index])
-        staged = stage(project, output)
+        if first_step <= 5:
+            progress(phase_index, PRODUCTION_STEPS[phase_index])
+            staged = stage(project, output)
+            write_phase_receipt(
+                project,
+                step=5,
+                input_identity=input_identity,
+                artifacts=phase_artifacts[5],
+            )
+        else:
+            staged = json.loads(
+                (production / "stage-manifest.json").read_text(encoding="utf-8")
+            )
     except BaseException as error:
         write_run_status(
             project,
@@ -274,6 +372,16 @@ def main() -> None:
             command.add_argument(
                 "--max-candidate-retries", type=int, choices=(0, 1), default=1
             )
+            command.add_argument(
+                "--resume",
+                action="store_true",
+                help="Reuse the contiguous chain of input-bound phase receipts.",
+            )
+            command.add_argument(
+                "--dry-run",
+                action="store_true",
+                help="With --resume, report reused and executed phases without mutation.",
+            )
         if name == "status":
             command.add_argument("--watch", action="store_true")
     args = parser.parse_args()
@@ -301,6 +409,8 @@ def main() -> None:
                 output=args.output,
                 performance_profile=args.performance_profile,
                 maximum_candidate_retries=args.max_candidate_retries,
+                resume=args.resume,
+                dry_run=args.dry_run,
             )
         )
         return
