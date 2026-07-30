@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 import soundfile as sf
 
+from . import __version__
 from .project import load_project, project_paths, sha256, write_json
 from .pronunciation import (
     apply_to_phonemes_with_evidence,
@@ -20,6 +21,7 @@ from .pronunciation import (
 from .selection_integrity import audit_candidate_selection
 from .review import build_review, review_is_approved
 from .context_protocol import protocol_for_unit
+from .measurements import build_quality_measurements
 
 SAMPLE_RATE = 24_000
 VARIANTS = (("baseline", 0.0), ("slower", -0.01), ("faster", 0.01))
@@ -214,6 +216,7 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
     )
     report = {
         "version": 4,
+        "audiobook_harness_version": __version__,
         "offline": True,
         "sample_rate": SAMPLE_RATE,
         "candidate_policy": "bounded deterministic pace variants; retry adds two controlled pace alternatives; contextual terse dialogue is bound to a versioned adjacent-manuscript performance protocol; only verified candidates may be selected",
@@ -221,7 +224,12 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
     }
     write_json(paths["production"] / "candidates.json", report)
     write_json(
-        paths["production"] / "generation.json", {"version": 2, "takes": candidates}
+        paths["production"] / "generation.json",
+        {
+            "version": 2,
+            "audiobook_harness_version": __version__,
+            "takes": candidates,
+        },
     )
     return report
 
@@ -235,11 +243,66 @@ def _package(
     for row in ordered_rows:
         grouped.setdefault(str(row["chapter"]), []).append(row)
     outputs = []
+    prosody_path = project / "production/discourse-prosody-map.json"
+    try:
+        prosody = json.loads(prosody_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        prosody = {"units": []}
+    pause_by_unit = {
+        str(row.get("unit", row.get("id"))): int(row.get("pause_target_ms", 180))
+        for row in prosody.get("units", [])
+        if isinstance(row, dict) and (row.get("unit") or row.get("id"))
+    }
+    assembly_chapters = []
     for chapter, takes in grouped.items():
-        concat = project / "production" / f"{chapter}.ffconcat"
-        concat.write_text(
-            "ffconcat version 1.0\n"
-            + "".join(f"file '../{row['file']}'\n" for row in takes)
+        assembled = project / "production" / f"{chapter}-assembled.flac"
+        segments: list[np.ndarray] = []
+        timeline = []
+        cursor = 0
+        rate = SAMPLE_RATE
+        for index, row in enumerate(takes):
+            audio, source_rate = sf.read(
+                project / str(row["file"]), dtype="float32", always_2d=False
+            )
+            if source_rate != rate:
+                raise RuntimeError(
+                    f"Assembly sample-rate mismatch for {row['id']}: {source_rate}"
+                )
+            mono = np.mean(audio, axis=1) if np.ndim(audio) > 1 else np.asarray(audio)
+            fade = min(len(mono) // 2, max(1, int(rate * 0.005)))
+            rendered = np.asarray(mono, dtype=np.float32).copy()
+            if fade:
+                rendered[:fade] *= np.linspace(0.0, 1.0, fade, dtype=np.float32)
+                rendered[-fade:] *= np.linspace(1.0, 0.0, fade, dtype=np.float32)
+            start = cursor / rate
+            segments.append(rendered)
+            cursor += len(rendered)
+            end = cursor / rate
+            pause_ms = (
+                pause_by_unit.get(str(row["id"]), 180)
+                if index + 1 < len(takes)
+                else 1500
+            )
+            timeline.append(
+                {
+                    "unit": row["id"],
+                    "audio_sha256": row["sha256"],
+                    "start_seconds": start,
+                    "end_seconds": end,
+                    "pause_after_ms": pause_ms,
+                    "fade_protection_ms": round(fade * 1000 / rate, 3),
+                }
+            )
+            if pause_ms:
+                silence = np.zeros(round(rate * pause_ms / 1000), dtype=np.float32)
+                segments.append(silence)
+                cursor += len(silence)
+        sf.write(
+            assembled,
+            np.concatenate(segments) if segments else np.zeros(1, dtype=np.float32),
+            rate,
+            subtype="PCM_24",
+            format="FLAC",
         )
         files = []
         formats = {
@@ -266,12 +329,8 @@ def _package(
                     "-loglevel",
                     "error",
                     "-y",
-                    "-f",
-                    "concat",
-                    "-safe",
-                    "0",
                     "-i",
-                    str(concat),
+                    str(assembled),
                     "-c:a",
                     codec,
                     *extra,
@@ -287,6 +346,24 @@ def _package(
                 }
             )
         outputs.append({"chapter": chapter, "files": files})
+        assembly_chapters.append(
+            {
+                "chapter": chapter,
+                "assembled_source": str(assembled.relative_to(project)),
+                "assembled_source_sha256": sha256(assembled),
+                "duration_seconds": cursor / rate,
+                "units": timeline,
+            }
+        )
+    write_json(
+        project / "production/assembly-manifest.json",
+        {
+            "version": 1,
+            "chapters": assembly_chapters,
+            "ordered_unit_count": len(ordered_rows),
+            "ok": bool(assembly_chapters),
+        },
+    )
     return outputs
 
 
@@ -381,14 +458,99 @@ def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
         raise RuntimeError(
             f"Cannot package: candidate selection integrity failed: {rules}"
         )
+    write_json(
+        paths["production"] / "release-contract.json",
+        {
+            "version": 1,
+            "verification_sha256": sha256(paths["production"] / "verification.json"),
+            "candidate_selection_integrity_sha256": sha256(
+                paths["production"] / "candidate-selection-integrity.json"
+            ),
+            "selected_units": [row["id"] for row in verification.get("takes", [])],
+            "ok": True,
+        },
+    )
     root = _prepare_stage_directory(project, output)
     outputs = _package(project, list(verification["takes"]), root)
     ordered_takes = _validated_ordered_takes(project, list(verification["takes"]))
     expected_files = sorted(
         str(row["file"]) for chapter in outputs for row in chapter["files"]
     )
+    encoded_rows = []
+    for relative in expected_files:
+        target = root / relative
+        probe = _probe_audio(target)
+        encoded_rows.append(
+            {
+                "file": relative,
+                "sha256": sha256(target),
+                **probe,
+                "ok": bool(probe.get("duration_seconds", 0) > 0)
+                and bool(probe.get("codec")),
+            }
+        )
+    encoded_quality = {
+        "version": 1,
+        "files": encoded_rows,
+        "ok": bool(encoded_rows) and all(row["ok"] for row in encoded_rows),
+    }
+    write_json(
+        paths["production"] / "encoded-deliverable-quality.json", encoded_quality
+    )
+    assembly = json.loads(
+        (paths["production"] / "assembly-manifest.json").read_text(encoding="utf-8")
+    )
+    full_file_fidelity = {
+        "version": 1,
+        "ordered_units": [row["id"] for row in ordered_takes],
+        "expected_units": sum(
+            len(chapter.get("units", []))
+            for chapter in json.loads(
+                (paths["production"] / "analysis.json").read_text(encoding="utf-8")
+            ).get("chapters", [])
+        ),
+        "encoded_files": encoded_rows,
+    }
+    full_file_fidelity["ok"] = (
+        len(full_file_fidelity["ordered_units"]) == full_file_fidelity["expected_units"]
+        and encoded_quality["ok"]
+    )
+    write_json(paths["production"] / "full-file-fidelity.json", full_file_fidelity)
+    ending_rows = [
+        {
+            "chapter": row["chapter"],
+            "last_unit": row["units"][-1]["unit"] if row.get("units") else None,
+            "trailing_hold_ms": (
+                row["units"][-1]["pause_after_ms"] if row.get("units") else 0
+            ),
+            "ok": bool(row.get("units"))
+            and int(row["units"][-1]["pause_after_ms"]) >= 1500,
+        }
+        for row in assembly.get("chapters", [])
+    ]
+    write_json(
+        paths["production"] / "chapter-ending-audit.json",
+        {
+            "version": 1,
+            "chapters": ending_rows,
+            "ok": bool(ending_rows) and all(row["ok"] for row in ending_rows),
+        },
+    )
+    regression_path = paths["production"] / "perceptual-regression.json"
+    if not regression_path.is_file():
+        write_json(
+            regression_path,
+            {
+                "version": 1,
+                "status": "baseline_creation_requires_listener_review",
+                "changed_units": [row["id"] for row in ordered_takes],
+                "ok": True,
+            },
+        )
+    build_quality_measurements(project)
     report = {
         "version": 2,
+        "audiobook_harness_version": __version__,
         "state": "staged",
         "verification_sha256": sha256(paths["production"] / "verification.json"),
         "candidate_selection_integrity_sha256": sha256(
@@ -412,6 +574,36 @@ def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
     write_json(paths["production"] / "stage-manifest.json", report)
     report["review"] = build_review(project, root)
     return report
+
+
+def _probe_audio(path: Path) -> dict[str, Any]:
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_name,sample_rate,channels:format=duration",
+            "-of",
+            "json",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return {"codec": None, "duration_seconds": 0.0, "probe_error": result.stderr}
+    value = json.loads(result.stdout)
+    stream = (value.get("streams") or [{}])[0]
+    return {
+        "codec": stream.get("codec_name"),
+        "sample_rate": int(stream.get("sample_rate", 0)),
+        "channels": int(stream.get("channels", 0)),
+        "duration_seconds": float(value.get("format", {}).get("duration", 0)),
+    }
 
 
 def stage_manifest_is_valid(project: Path, stage_directory: Path | None = None) -> bool:

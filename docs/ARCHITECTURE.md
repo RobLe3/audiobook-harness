@@ -1,6 +1,16 @@
 # Architecture
 
-This document describes Audiobook Harness **0.4.2**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.3**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+
+The harness owns one eight-phase graph: analysis, synthesis, candidate
+realization, cue QA, pre-mix gating, assembly, post-mix QA, and packaging.
+Projects supply source, reviewed vocabulary, performance policy, and optional
+extensions. They do not fork the harness identity.
+
+`feature-parity.json` is the conformance index. Core narration and review
+capabilities are required. Communication processing, soundscapes, music,
+battle audio, and videobook output use the same receipt contract but remain
+optional project-profile capabilities.
 
 The harness keeps source analysis, candidate generation, verification, staging,
 and publication separate. Each UTF-8 chapter becomes source-preserving semantic

@@ -4,12 +4,15 @@ import hashlib
 import html
 import json
 import secrets
+from mimetypes import guess_type
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from . import __version__
 from .feedback import append_observations, validate_decisions
+from .parity import project_profile_identity
 from .project import write_json
 
 
@@ -30,6 +33,47 @@ def build_review(project: Path, stage: Path | None = None) -> dict[str, Any]:
         else []
     )
     mandatory = {str(row["unit"]) for row in risks if row.get("mandatory_review")}
+    analysis_path = production / "analysis.json"
+    analysis = (
+        json.loads(analysis_path.read_text(encoding="utf-8"))
+        if analysis_path.is_file()
+        else {"chapters": []}
+    )
+    verification_path = production / "verification.json"
+    verification = (
+        json.loads(verification_path.read_text(encoding="utf-8"))
+        if verification_path.is_file()
+        else {"takes": []}
+    )
+    take_by_id = {
+        str(row["id"]): row for row in verification.get("takes", []) if row.get("id")
+    }
+    unit_rows = [
+        unit
+        for chapter in analysis.get("chapters", [])
+        for unit in chapter.get("units", [])
+    ]
+    unit_by_id = {str(row["id"]): row for row in unit_rows}
+    ordered_ids = [str(row["id"]) for row in staged.get("ordered_units", [])]
+    speaker_map = _map_units(production / "dialogue-speaker-map.json")
+    prosody_map = _map_units(production / "discourse-prosody-map.json")
+    energy_map = _map_units(production / "speaker-energy-map.json")
+    risk_map = {str(row["unit"]): row for row in risks}
+    chapter_files = {
+        str(row["chapter"]): [str(item["file"]) for item in row.get("files", [])]
+        for row in staged.get("outputs", [])
+    }
+    chapter_offsets: dict[str, float] = {}
+    cue_timings: dict[str, tuple[float, float]] = {}
+    for unit_id in ordered_ids:
+        take = take_by_id.get(unit_id, {})
+        chapter = str(
+            take.get("chapter", unit_by_id.get(unit_id, {}).get("chapter", ""))
+        )
+        start = chapter_offsets.get(chapter, 0.0)
+        end = start + float(take.get("duration_seconds", 0.0))
+        cue_timings[unit_id] = (start, end)
+        chapter_offsets[chapter] = end
     items = [
         {
             "id": f"chapter:{row['chapter']}",
@@ -41,22 +85,90 @@ def build_review(project: Path, stage: Path | None = None) -> dict[str, Any]:
     ]
     for unit in staged.get("ordered_units", []):
         if str(unit["id"]) in mandatory:
+            unit_id = str(unit["id"])
+            index = ordered_ids.index(unit_id)
+            source = unit_by_id.get(unit_id, {})
+            take = take_by_id.get(unit_id, {})
+            chapter = str(unit.get("chapter", take.get("chapter", "")))
+            start, end = cue_timings.get(unit_id, (0.0, 0.0))
+            mastered_file = next(
+                (
+                    path
+                    for path in chapter_files.get(chapter, [])
+                    if Path(path).suffix.lower() in {".m4a", ".mp3", ".flac"}
+                ),
+                None,
+            )
             items.append(
                 {
-                    "id": str(unit["id"]),
+                    "id": unit_id,
                     "kind": "high_risk_unit",
                     "audio_sha256": unit["audio_sha256"],
                     "mandatory": True,
+                    "published_text": source.get("text", take.get("text")),
+                    "spoken_text": take.get("text"),
+                    "previous_context": (
+                        unit_by_id.get(ordered_ids[index - 1], {}).get("text")
+                        if index
+                        else None
+                    ),
+                    "next_context": (
+                        unit_by_id.get(ordered_ids[index + 1], {}).get("text")
+                        if index + 1 < len(ordered_ids)
+                        else None
+                    ),
+                    "source_audio": f"/api/unit-audio/{unit_id}",
+                    "mastered_context": {
+                        "audio": mastered_file,
+                        "excerpt_start_seconds": max(0.0, start - 1.0),
+                        "excerpt_end_seconds": end + 1.0,
+                    }
+                    if mastered_file
+                    else None,
+                    "machine_evidence": {
+                        "speaker": speaker_map.get(unit_id),
+                        "prosody": prosody_map.get(unit_id),
+                        "energy": energy_map.get(unit_id),
+                        "risk": risk_map.get(unit_id),
+                        "primary_wer": take.get("primary_wer"),
+                        "secondary_wer": take.get("secondary_wer"),
+                    },
                 }
             )
     manifest: dict[str, Any] = {
-        "version": 1,
+        "version": 3,
+        "audiobook_harness_version": __version__,
         "stage_manifest_sha256": _canonical(staged),
         "items": items,
+        "cues": [row for row in items if row["kind"] == "high_risk_unit"],
+        "decision_values": ["approve", "reject", "uncertain"],
+        "defect_categories": [
+            "spoken_form",
+            "pause",
+            "pronunciation",
+            "mix_or_loudness",
+            "performance",
+            "speaker_or_mode",
+            "stretch_or_timing",
+            "other",
+        ],
+        "playback_contract": "mastered_context_default_isolated_diagnostic",
     }
     manifest["review_identity_sha256"] = _canonical(manifest)
     write_json(production / "review-manifest.json", manifest)
     return manifest
+
+
+def _map_units(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {
+        str(row.get("unit", row.get("id"))): row
+        for row in value.get("units", [])
+        if isinstance(row, dict) and (row.get("unit") or row.get("id"))
+    }
 
 
 def finalize_review(project: Path, decisions: list[dict[str, Any]]) -> dict[str, Any]:
@@ -67,7 +179,9 @@ def finalize_review(project: Path, decisions: list[dict[str, Any]]) -> dict[str,
     required = [str(row["id"]) for row in manifest["items"] if row.get("mandatory")]
     unresolved = [item for item in required if by_id.get(item) != "approve"]
     report = {
-        "version": 1,
+        "version": 2,
+        "audiobook_harness_version": __version__,
+        "project_profile_sha256": project_profile_identity(project),
         "review_identity_sha256": manifest["review_identity_sha256"],
         "decisions": decisions,
         "unresolved": unresolved,
@@ -116,9 +230,18 @@ def serve_review(project: Path, host: str, port: int) -> None:
         ]
         options = "".join(f"<option>{value}</option>" for value in categories)
         for row in manifest.get("items", []):
+            media = list(row.get("files", []))
+            if row.get("source_audio"):
+                media.append(str(row["source_audio"]))
+            mastered = row.get("mastered_context") or {}
+            if mastered.get("audio"):
+                media.insert(
+                    0,
+                    f"/{mastered['audio']}#t={mastered['excerpt_start_seconds']},{mastered['excerpt_end_seconds']}",
+                )
             links = " ".join(
-                f'<audio controls preload="none" src="/{html.escape(str(path))}"></audio>'
-                for path in row.get("files", [])
+                f'<audio controls preload="none" src="{html.escape(str(path))}"></audio>'
+                for path in media
             )
             item_id = html.escape(str(row["id"]))
             items.append(
@@ -183,6 +306,32 @@ document.querySelector("#finalize").onclick=async()=>{{const r=await fetch("/api
                     else {"decisions": []}
                 )
                 self._respond(200, value)
+                return
+            if route.startswith("/api/unit-audio/"):
+                unit_id = route.rsplit("/", 1)[-1]
+                try:
+                    verification = json.loads(
+                        (project / "production/verification.json").read_text()
+                    )
+                    row = next(
+                        item
+                        for item in verification.get("takes", [])
+                        if str(item.get("id")) == unit_id
+                    )
+                    path = (project / str(row["file"])).resolve()
+                    if not path.is_relative_to(project.resolve()) or not path.is_file():
+                        raise FileNotFoundError(unit_id)
+                    payload = path.read_bytes()
+                    self.send_response(200)
+                    self.send_header(
+                        "Content-Type",
+                        guess_type(path.name)[0] or "application/octet-stream",
+                    )
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                except (OSError, json.JSONDecodeError, StopIteration, KeyError):
+                    self.send_error(404)
                 return
             super().do_GET()
 

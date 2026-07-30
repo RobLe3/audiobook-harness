@@ -24,6 +24,9 @@ def test_contracts_preserve_structure_and_separate_spoken_forms(tmp_path: Path):
     reports = build_analysis_contracts(tmp_path, [chapter], "en-gb")
     assert reports["manuscript-structure.json"]["chapters"][0]["paragraphs"]
     assert reports["prosody-plan.json"]["defaults_ms"]["chapter_tail"] == 1500
+    assert reports["discourse-prosody-map.json"]["units"]
+    assert reports["speaker-energy-map.json"]["units"]
+    assert reports["candidate-plan.json"]["units"]
 
 
 def test_review_requires_exact_manifest_identity(tmp_path: Path):

@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 
 import pytest
+import numpy as np
+import soundfile as sf
 
 from audiobook_harness import cli
 from audiobook_harness.project import scaffold, sha256
@@ -19,6 +21,7 @@ from audiobook_harness.tts import (
     promote,
     stage_manifest_is_valid,
     _validated_ordered_takes,
+    _package,
 )
 
 
@@ -37,6 +40,64 @@ def test_status_writes_machine_and_readable_progress(tmp_path: Path):
     )
     assert (project / "production/run-status.json").is_file()
     assert "verify" in render_status(project).read_text()
+
+
+def test_assembly_inserts_planned_pause_and_protected_tail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    project = tmp_path / "book"
+    (project / "production").mkdir(parents=True)
+    source = project / "assets/candidates/ch1/u1/take.flac"
+    source.parent.mkdir(parents=True)
+    sf.write(source, np.ones(2400, dtype=np.float32) * 0.1, 24000)
+    (project / "project.yaml").write_text("outputs: [flac]\n")
+    (project / "production/analysis.json").write_text(
+        json.dumps(
+            {
+                "chapters": [
+                    {
+                        "units": [
+                            {
+                                "id": "u1",
+                                "chapter_index": 1,
+                                "unit_index": 1,
+                                "global_sequence": 1,
+                            }
+                        ]
+                    }
+                ]
+            }
+        )
+    )
+    (project / "production/discourse-prosody-map.json").write_text(
+        json.dumps({"units": [{"unit": "u1", "pause_target_ms": 400}]})
+    )
+
+    def fake_run(command, **kwargs):
+        shutil.copy2(command[command.index("-i") + 1], command[-1])
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    output = project / "staging"
+    output.mkdir()
+    _package(
+        project,
+        [
+            {
+                "id": "u1",
+                "chapter": "ch1",
+                "chapter_index": 1,
+                "unit_index": 1,
+                "global_sequence": 1,
+                "file": str(source.relative_to(project)),
+                "sha256": sha256(source),
+            }
+        ],
+        output,
+    )
+    manifest = json.loads((project / "production/assembly-manifest.json").read_text())
+    assert manifest["chapters"][0]["units"][0]["pause_after_ms"] == 1500
+    assert manifest["chapters"][0]["duration_seconds"] >= 1.59
 
 
 def test_terminal_status_is_explicitly_historical(tmp_path: Path):
@@ -93,6 +154,8 @@ def _verified_stage(
     (stage / "stage-manifest.json").write_text(json.dumps(manifest))
     (project / "production/stage-manifest.json").write_text(json.dumps(manifest))
     review = build_review(project, stage)
+    assert review["version"] == 3
+    assert review["audiobook_harness_version"] == "0.4.3"
     finalize_review(
         project, [{"id": row["id"], "decision": "approve"} for row in review["items"]]
     )

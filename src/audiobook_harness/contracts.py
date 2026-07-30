@@ -6,7 +6,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .feedback import defaults_identity, historical_matches, load_defaults
+from .parity import project_profile_identity
 from .project import normalized_words, write_json
 
 
@@ -26,6 +28,10 @@ def build_analysis_contracts(
     spoken_entries: list[dict[str, Any]] = []
     speakers: list[dict[str, Any]] = []
     prosody: list[dict[str, Any]] = []
+    discourse: list[dict[str, Any]] = []
+    energy: list[dict[str, Any]] = []
+    emotions: list[dict[str, Any]] = []
+    candidate_plan: list[dict[str, Any]] = []
     risks: list[dict[str, Any]] = []
     units: list[dict[str, Any]] = []
     learned_defaults = load_defaults(project)
@@ -70,6 +76,8 @@ def build_analysis_contracts(
             value = str(unit["text"])
             words = normalized_words(value)
             quote = value.lstrip().startswith(('"', "“"))
+            question = value.rstrip().endswith(("?", "?”", '?"'))
+            exclamation = value.rstrip().endswith(("!", "!”", '!"'))
             factors = []
             learned = historical_matches(project, value)
             if len(words) <= 5:
@@ -110,12 +118,62 @@ def build_analysis_contracts(
                     "confidence": 0.0 if quote else 1.0,
                 }
             )
+            sentence_role = (
+                "genuine_question_rise"
+                if question
+                else "emphatic_terminal"
+                if exclamation
+                else "declarative_terminal"
+            )
+            pause_after = 280 if quote else 180
             prosody.append(
                 {
                     "unit": unit["id"],
                     "boundary_after": boundary,
-                    "pause_after_ms": 280 if quote else 180,
+                    "pause_after_ms": pause_after,
                     "breath_eligible": len(words) >= 18,
+                }
+            )
+            discourse.append(
+                {
+                    "unit": unit["id"],
+                    "sentence_role": sentence_role,
+                    "boundary_function": (
+                        "dialogue_turn" if quote else "narrative_continuation"
+                    ),
+                    "pause_target_ms": pause_after,
+                    "breath_eligibility": (
+                        "eligible" if len(words) >= 18 else "forbidden"
+                    ),
+                    "source": "deterministic_manuscript_analysis",
+                }
+            )
+            energy_tier = (
+                "heightened"
+                if exclamation
+                else "engaged"
+                if quote or question
+                else "grounded"
+            )
+            energy.append(
+                {
+                    "unit": unit["id"],
+                    "tier": energy_tier,
+                    "contour": "release" if exclamation else "hold",
+                    "delivery": {
+                        "pace": "controlled",
+                        "prominence_budget": 2 if energy_tier == "heightened" else 1,
+                        "pause_after_ms": pause_after,
+                    },
+                    "source": "punctuation_dialogue_and_density",
+                }
+            )
+            emotions.append(
+                {
+                    "unit": unit["id"],
+                    "label": "unspecified",
+                    "confidence": 0.0,
+                    "review_required": quote,
                 }
             )
             risks.append(
@@ -132,6 +190,23 @@ def build_analysis_contracts(
                     "mandatory_review": risk == "high",
                     "listener_derived_defaults": learned,
                     "listener_derived_defaults_sha256": learned_defaults_sha256,
+                }
+            )
+            candidate_plan.append(
+                {
+                    "unit": unit["id"],
+                    "candidate_budget": 5
+                    if risk == "high"
+                    else 4
+                    if risk == "medium"
+                    else 3,
+                    "dimensions": [
+                        "pace",
+                        "pause_plan",
+                        "phrase_segmentation",
+                    ],
+                    "listener_derived_defaults": learned,
+                    "selection_policy": "quality_vector_then_deterministic_tie_break",
                 }
             )
             for match in structured.finditer(value):
@@ -157,6 +232,9 @@ def build_analysis_contracts(
             "ok": not spoken_entries,
         },
         "dialogue-speaker-map.json": {"version": 1, "units": speakers},
+        "discourse-prosody-map.json": {"version": 1, "units": discourse},
+        "speaker-energy-map.json": {"version": 1, "units": energy},
+        "emotion-map.json": {"version": 1, "units": emotions},
         "prosody-plan.json": {
             "version": 1,
             "units": prosody,
@@ -170,6 +248,7 @@ def build_analysis_contracts(
         },
         "tts-risk-map.json": {"version": 1, "units": risks},
         "performance-units.json": {"version": 1, "units": units},
+        "candidate-plan.json": {"version": 1, "units": candidate_plan},
         "listener-defaults-preflight.json": {
             "version": 1,
             "defaults_sha256": learned_defaults_sha256,
@@ -182,6 +261,8 @@ def build_analysis_contracts(
         },
     }
     for name, report in reports.items():
+        report["audiobook_harness_version"] = __version__
+        report["project_profile_sha256"] = project_profile_identity(project)
         report["identity_sha256"] = _identity(report)
         write_json(production / name, report)
     return reports

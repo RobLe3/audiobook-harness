@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.3
+
+- Establish Audiobook Harness 0.4.x as the sole current harness identity.
+- Add the eight-phase pipeline, feature-parity, and quality-vector contracts.
+- Add discourse-prosody, speaker-energy, emotion, and candidate-plan analysis.
+- Add deliberate pause assembly, ending protection, encoded QA, and the
+  mastered-context review schema.
+
 ## 0.4.2
 
 - Save local review drafts and finalized decisions without requiring downloads.
@@ -17,6 +25,6 @@
 ## 0.4.1
 
 - Establishes one authoritative product version across package metadata, CLI output, reports, and documentation.
-- Separates current SemVer from immutable NORDLICHT 8.3.3/8.4 legacy artifact contracts.
+- Separates current SemVer from immutable pre-SemVer project artifacts.
 - Adds a hash-bound, non-destructive compatibility audit for reusable historical evidence.
 - Rejects stale local Docker smoke images as current-checkout verification.

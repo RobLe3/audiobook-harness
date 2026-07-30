@@ -8,8 +8,6 @@ from typing import Any
 from ._version import __version__
 from .project import sha256, write_json
 
-LEGACY_NORDLICHT_NARRATION_CONTRACT = "8.3.3"
-LEGACY_NORDLICHT_SOUNDSCAPE_CONTRACT = "8.4"
 COMPATIBILITY_ARTIFACTS = (
     "analysis.json",
     "candidates.json",
@@ -39,10 +37,7 @@ def compatibility_receipt(project: Path, *, apply: bool = False) -> dict[str, An
     payload: dict[str, Any] = {
         "version": 1,
         "product_version": __version__,
-        "legacy_contracts": {
-            "narration": LEGACY_NORDLICHT_NARRATION_CONTRACT,
-            "soundscape": LEGACY_NORDLICHT_SOUNDSCAPE_CONTRACT,
-        },
+        "historical_artifact_family": "pre-semver-nordlicht",
         "inputs": inputs,
         "artifacts": artifacts,
         "legacy_receipts_immutable": True,

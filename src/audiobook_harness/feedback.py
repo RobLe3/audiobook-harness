@@ -193,11 +193,40 @@ def compile_feedback(project: Path) -> dict[str, Any]:
         }
         for root, items in sorted(repeated.items())
     ]
+    manuscript_words = 0
+    analysis_path = project / "production/analysis.json"
+    if analysis_path.is_file():
+        try:
+            analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+            manuscript_words = sum(
+                len(str(unit.get("text", "")).split())
+                for chapter in analysis.get("chapters", [])
+                for unit in chapter.get("units", [])
+            )
+        except json.JSONDecodeError:
+            failures.append({"line": 0, "error": "invalid_analysis_json"})
+    rejected = sum(row.get("decision") == "reject" for row in records)
+    uncertain = sum(row.get("decision") == "uncertain" for row in records)
     summary = {
         "version": 1,
         "records": len(records),
         "categories": categories,
         "promotion_candidates": candidates,
+        "review_burden": {
+            "decisions": len(records),
+            "manuscript_words": manuscript_words,
+            "items_per_1000_words": round(
+                len(records) * 1000 / max(1, manuscript_words), 3
+            ),
+            "rejected": rejected,
+            "uncertain": uncertain,
+            "rejection_or_uncertain_rate": round(
+                (rejected + uncertain) / max(1, len(records)), 4
+            ),
+            "corrected_audio_records": sum(
+                bool(row.get("corrected_audio_sha256")) for row in records
+            ),
+        },
         "failures": failures,
         "ok": not failures,
     }

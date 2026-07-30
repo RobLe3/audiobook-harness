@@ -11,6 +11,8 @@ import numpy as np
 import soundfile as sf
 from rapidfuzz.distance import Levenshtein
 
+from . import __version__
+from .measurements import build_quality_measurements
 from .project import load_project, normalized_words, project_paths, sha256, write_json
 from .pronunciation import asr_equivalences, audit_lexicon, load_reviewed_lexicon
 from .selection_integrity import audit_candidate_selection
@@ -433,16 +435,32 @@ def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") ->
                 "acoustic_failures": acoustic,
                 "ok": first_error <= 0.01 and second_error <= 0.01 and not acoustic,
             }
+            seconds_per_word = attempt["duration_seconds"] / max(1, len(expected))
+            attempt["quality_vector"] = {
+                "text_error": round(first_error + second_error, 6),
+                "pace_deviation": round(abs(seconds_per_word - 0.38), 6),
+                "speed_deviation": round(abs(float(take["speed"]) - 0.95), 6),
+            }
+            attempt["quality_score"] = round(
+                (first_error + second_error) * 100
+                + abs(seconds_per_word - 0.38) * 2
+                + abs(float(take["speed"]) - 0.95),
+                6,
+            )
             attempts.append(attempt)
         passing = [row for row in attempts if row["ok"]]
         passing.sort(
-            key=lambda row: (abs(float(row["speed"]) - 0.95), str(row["candidate"]))
+            key=lambda row: (
+                float(row["quality_score"]),
+                abs(float(row["speed"]) - 0.95),
+                str(row["candidate"]),
+            )
         )
         if passing:
             selected.append(
                 {
                     **passing[0],
-                    "selection_reason": "closest verified deterministic candidate",
+                    "selection_reason": "best verified quality vector; deterministic speed and candidate tie-break",
                 }
             )
             continue
@@ -472,6 +490,7 @@ def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") ->
     )
     report = {
         "version": 5,
+        "audiobook_harness_version": __version__,
         "ok": lexicon_report["ok"] and not failures and alignment["ok"],
         "candidate_policy": "dual ASR, acoustic checks, alignment, and hash-bound selection",
         "candidate_manifest_sha256": sha256(candidates_path),
@@ -493,4 +512,76 @@ def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") ->
     write_json(paths["production"] / "verification.json", report)
     _finalize_verification_integrity(project, report)
     write_json(paths["production"] / "verification.json", report)
+    write_json(paths["production"] / "pronunciation-audit.json", {"version": 1, **lexicon_report})
+    duration_rows = [
+        {
+            "unit": row["id"],
+            "duration_seconds": row["duration_seconds"],
+            "words": len(normalized_words(str(row["text"]))),
+            "seconds_per_word": row["duration_seconds"]
+            / max(1, len(normalized_words(str(row["text"])))),
+        }
+        for row in selected
+    ]
+    write_json(
+        paths["production"] / "phoneme-duration-audit.json",
+        {
+            "version": 1,
+            "units": duration_rows,
+            "ok": all(row["seconds_per_word"] <= 1.6 for row in duration_rows),
+        },
+    )
+    write_json(
+        paths["production"] / "pause-economy-lint.json",
+        {
+            "version": 1,
+            "units": [
+                {
+                    "unit": row["id"],
+                    "unexpected_silence": "unexpected_silence"
+                    in row.get("acoustic_failures", []),
+                }
+                for row in selected
+            ],
+            "ok": all(
+                "unexpected_silence" not in row.get("acoustic_failures", [])
+                for row in selected
+            ),
+        },
+    )
+    selected_ids = {str(row["id"]) for row in selected}
+    planned_energy = _planned_units(paths["production"] / "speaker-energy-map.json")
+    planned_prosody = _planned_units(paths["production"] / "discourse-prosody-map.json")
+    write_json(
+        paths["production"] / "energy-lint.json",
+        {
+            "version": 1,
+            "planned_units": sorted(planned_energy),
+            "selected_units": sorted(selected_ids),
+            "ok": bool(selected_ids) and selected_ids <= planned_energy,
+        },
+    )
+    write_json(
+        paths["production"] / "expressive-realization.json",
+        {
+            "version": 1,
+            "measurement_scope": "delivery_plan_coverage",
+            "planned_units": sorted(planned_prosody),
+            "selected_units": sorted(selected_ids),
+            "ok": bool(selected_ids) and selected_ids <= planned_prosody,
+        },
+    )
+    build_quality_measurements(project)
     return report
+
+
+def _planned_units(path: Path) -> set[str]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    return {
+        str(row.get("unit", row.get("id")))
+        for row in value.get("units", [])
+        if isinstance(row, dict) and (row.get("unit") or row.get("id"))
+    }

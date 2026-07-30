@@ -1,6 +1,6 @@
 # Audiobook Harness Skill
 
-This document describes Audiobook Harness **0.4.2**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.3**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 Use this skill when an author wants a local, verified audiobook.
 
@@ -22,7 +22,9 @@ Use this skill when an author wants a local, verified audiobook.
    uncertain decisions require a defect category; `other` also needs a note.
 10. Run `compile-feedback` after finalization. Apply only promoted rules from
     `listener-derived-defaults.json` during the next analysis.
-11. Run `promote` only after verification and the current manifest-bound
+11. Run `pipeline-audit`, `quality-measurements`, and `feature-parity`. Treat
+    missing evidence as a block, not as an inherited project capability.
+12. Run `promote` only after verification and the current manifest-bound
     listening review pass. Never copy staged media manually.
 
 ## Rules
@@ -37,4 +39,6 @@ Use this skill when an author wants a local, verified audiobook.
   episodes, or explicit editorial authority are additionally required.
 - Preserve the original note, audio hash, correction identity, and follow-up
   result in the append-only feedback ledger.
+- Refer to the product only by its 0.4.x SemVer. A book title, project profile,
+  schema revision, or historical receipt is not another harness version.
 - Do not clone voices without explicit rights and user instruction.

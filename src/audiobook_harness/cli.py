@@ -7,6 +7,9 @@ from pathlib import Path
 
 from . import __version__
 from .feedback import compile_feedback, promote_rule
+from .measurements import build_quality_measurements
+from .parity import feature_parity
+from .pipeline import audit_pipeline
 from .analysis import analyze
 from .project import scaffold
 from .performance import resolve_profile
@@ -373,6 +376,9 @@ def main() -> None:
         "finalize-review",
         "compile-feedback",
         "promote-feedback",
+        "feature-parity",
+        "pipeline-audit",
+        "quality-measurements",
     ):
         command = sub.add_parser(name)
         command.add_argument("project", type=Path)
@@ -457,6 +463,15 @@ def main() -> None:
         return
     if args.command == "promote-feedback":
         emit(promote_rule(project, args.rule_id))
+        return
+    if args.command == "feature-parity":
+        emit(feature_parity(project))
+        return
+    if args.command == "pipeline-audit":
+        emit(audit_pipeline(project))
+        return
+    if args.command == "quality-measurements":
+        emit(build_quality_measurements(project))
         return
     if args.command == "produce":
         emit(
