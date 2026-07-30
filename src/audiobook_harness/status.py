@@ -48,6 +48,50 @@ def owner_activity(status: dict[str, Any]) -> tuple[str, str]:
     return "inactive", "the recorded production command is no longer running"
 
 
+def classify_asr_activity(
+    *,
+    state: str,
+    worker_active: bool,
+    evidence_age_seconds: float | None,
+) -> str:
+    if state == "complete":
+        return "complete"
+    if state == "failed":
+        return "failed"
+    if worker_active and (evidence_age_seconds is None or evidence_age_seconds <= 300):
+        return "active"
+    if worker_active and (evidence_age_seconds is None or evidence_age_seconds <= 900):
+        return "slow_but_active"
+    if evidence_age_seconds is not None and evidence_age_seconds > 900:
+        return "stalled"
+    return "slow_but_active" if worker_active else "inactive"
+
+
+def asr_activity(project: Path, *, worker_active: bool) -> dict[str, Any] | None:
+    path = project_paths(project)["production"] / "asr-progress.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    try:
+        age = max(0.0, time.time() - path.stat().st_mtime)
+    except OSError:
+        age = None
+    expected = int(value.get("expected_candidates", 0) or 0)
+    completed = int(value.get("completed_candidates", 0) or 0)
+    return {
+        **value,
+        "activity": classify_asr_activity(
+            state=str(value.get("state", "")),
+            worker_active=worker_active,
+            evidence_age_seconds=age,
+        ),
+        "percent": round(100 * completed / expected, 1) if expected else None,
+        "evidence_age_seconds": round(age, 1) if age is not None else None,
+        "advisory_only": True,
+    }
+
+
 def write_run_status(
     project: Path, *, state: str, phase: str, **changes: Any
 ) -> dict[str, Any]:
@@ -89,6 +133,7 @@ def render_status(project: Path, status: dict[str, Any] | None = None) -> Path:
     width = 20
     filled = int(width * completed / max(1, len(steps)))
     is_active = status.get("state") == "running" and owner_state == "active"
+    asr = asr_activity(project, worker_active=is_active)
     bar = "█" * filled + ("▌" if is_active and filled < width else "")
     bar += "·" * (width - len(bar))
     output = paths["production"] / "progress.md"
@@ -108,13 +153,22 @@ def render_status(project: Path, status: dict[str, Any] | None = None) -> Path:
             f"{status.get('maximum_candidate_retries')} used. "
             "Quality thresholds remain unchanged.\n"
         )
+    asr_detail = ""
+    if asr is not None:
+        asr_detail = (
+            "\n**ASR activity:** "
+            f"`{asr.get('activity')}` — "
+            f"{asr.get('completed_candidates', 0)}/"
+            f"{asr.get('expected_candidates', 0)} candidate decodes; "
+            f"{asr.get('cache_hits', 0)} cached. Advisory only.\n"
+        )
     symbols = {"complete": "█", "running": "▌", "failed": "✕"}
     output.write_text(
         "# Audiobook Harness progress\n\n"
         f"Updated: {status.get('updated_at', _now())}\n\n"
         f"**State:** `{status.get('state', 'not_started')}`\n\n"
         f"**Production owner:** `{owner_state}` — {owner_detail}.\n"
-        f"{history}{retry_detail}\n"
+        f"{history}{retry_detail}{asr_detail}\n"
         f"`[{bar}] {completed}/{len(steps)} steps complete`\n\n"
         f"**Current:** {active_step}\n\n"
         + "\n".join(

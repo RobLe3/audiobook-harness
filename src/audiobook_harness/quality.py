@@ -4,6 +4,7 @@ import json
 import gc
 import shutil
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -14,7 +15,12 @@ from rapidfuzz.distance import Levenshtein
 from . import __version__
 from .measurements import build_quality_measurements
 from .project import load_project, normalized_words, project_paths, sha256, write_json
-from .pronunciation import asr_equivalences, audit_lexicon, load_reviewed_lexicon
+from .pronunciation import (
+    asr_equivalences,
+    audit_lexicon,
+    load_reviewed_lexicon,
+    reviewed_phrase_equivalence,
+)
 from .selection_integrity import audit_candidate_selection
 from .asr_cache import evidence_key, load as load_asr_cache, save as save_asr_cache
 from .performance import resolve_profile
@@ -23,6 +29,10 @@ from .performance import resolve_profile
 ASR_DEVICE = "cpu"
 PRIMARY_DECODE = {"fp16": False, "verbose": False, "word_timestamps": False}
 SECONDARY_DECODE = {"fp16": False, "verbose": False, "word_timestamps": False}
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _cached_transcripts(
@@ -178,7 +188,9 @@ def _alignment_complete(
                 if isinstance(entry, dict):
                     begin = float(entry.get("begin", entry.get("start")))
                     end = float(entry.get("end", entry.get("stop")))
-                    label = str(entry.get("label", entry.get("text", entry.get("word", ""))))
+                    label = str(
+                        entry.get("label", entry.get("text", entry.get("word", "")))
+                    )
                 elif isinstance(entry, list) and len(entry) >= 3:
                     begin, end, label = float(entry[0]), float(entry[1]), str(entry[2])
                 else:
@@ -214,14 +226,23 @@ def _transient_alignment_failure(text: str) -> bool:
     """Retry only host-worker failures, never linguistic or evidence failures."""
     value = text.casefold()
     markers = (
-        "resource_tracker", "semaphore", "multiprocessing", "broken pipe",
-        "worker process", "worker startup", "cannot start new thread",
+        "resource_tracker",
+        "semaphore",
+        "multiprocessing",
+        "broken pipe",
+        "worker process",
+        "worker startup",
+        "cannot start new thread",
     )
     return any(marker in value for marker in markers)
 
 
 def run_mfa_alignment(
-    project: Path, repo: Path, takes: list[dict[str, Any]], *, performance_profile: str = "legacy"
+    project: Path,
+    repo: Path,
+    takes: list[dict[str, Any]],
+    *,
+    performance_profile: str = "legacy",
 ) -> dict[str, Any]:
     """Align selected takes locally with isolated attempts and conservative fallback.
 
@@ -234,8 +255,12 @@ def run_mfa_alignment(
     profile = resolve_profile(performance_profile)
     mfa = _mfa_command(repo)
     report: dict[str, Any] = {
-        "required": True, "available": bool(mfa), "ok": False,
-        "takes": len(takes), "performance_profile": profile.as_dict(), "attempts": [],
+        "required": True,
+        "available": bool(mfa),
+        "ok": False,
+        "takes": len(takes),
+        "performance_profile": profile.as_dict(),
+        "attempts": [],
     }
     if not mfa:
         report["failure"] = "mfa executable is missing"
@@ -259,7 +284,9 @@ def run_mfa_alignment(
         source = project / str(take["file"])
         stem = corpus / str(take["id"])
         _ffmpeg_wav(source, stem.with_suffix(".wav"))
-        stem.with_suffix(".lab").write_text(str(take["text"]).strip() + "\n", encoding="utf-8")
+        stem.with_suffix(".lab").write_text(
+            str(take["text"]).strip() + "\n", encoding="utf-8"
+        )
 
     modes = [("serial", 1)]
     if profile.alignment_multiprocessing and profile.alignment_jobs > 1:
@@ -271,39 +298,70 @@ def run_mfa_alignment(
         shutil.rmtree(attempt_root, ignore_errors=True)
         runtime.mkdir(parents=True, exist_ok=True)
         command = [
-            mfa, "align", "--clean", "--single_speaker", "--output_format", "json",
-            "--temporary_directory", str(runtime),
+            mfa,
+            "align",
+            "--clean",
+            "--single_speaker",
+            "--output_format",
+            "json",
+            "--temporary_directory",
+            str(runtime),
         ]
         if jobs > 1:
             command.extend(["--num_jobs", str(jobs)])
         command.extend([str(corpus), dictionary, acoustic, str(aligned)])
-        completed = subprocess.run(command, capture_output=True, text=True, env=_mfa_environment(repo))
-        complete, missing = _alignment_complete(aligned, takes) if completed.returncode == 0 else (False, [str(t["id"]) for t in takes])
+        completed = subprocess.run(
+            command, capture_output=True, text=True, env=_mfa_environment(repo)
+        )
+        complete, missing = (
+            _alignment_complete(aligned, takes)
+            if completed.returncode == 0
+            else (False, [str(t["id"]) for t in takes])
+        )
         output = f"{completed.stdout}\n{completed.stderr}"
         transient = completed.returncode != 0 and _transient_alignment_failure(output)
-        report["attempts"].append({
-            "mode": mode, "jobs": jobs, "command": command, "returncode": completed.returncode,
-            "stdout_tail": completed.stdout[-2000:], "stderr_tail": completed.stderr[-2000:],
-            "missing_alignment": missing, "transient_worker_failure": transient,
-        })
+        report["attempts"].append(
+            {
+                "mode": mode,
+                "jobs": jobs,
+                "command": command,
+                "returncode": completed.returncode,
+                "stdout_tail": completed.stdout[-2000:],
+                "stderr_tail": completed.stderr[-2000:],
+                "missing_alignment": missing,
+                "transient_worker_failure": transient,
+            }
+        )
         if completed.returncode == 0 and complete:
             accepted = aligned
             break
-        if not (attempt_index == 1 and mode == "parallel" and transient and profile.alignment_serial_fallback):
+        if not (
+            attempt_index == 1
+            and mode == "parallel"
+            and transient
+            and profile.alignment_serial_fallback
+        ):
             break
     final = report["attempts"][-1] if report["attempts"] else {}
     if accepted is not None:
         shutil.rmtree(canonical, ignore_errors=True)
         shutil.copytree(accepted, canonical)
-    report.update({
-        "dictionary": dictionary, "acoustic_model": acoustic,
-        "command": final.get("command", []), "returncode": final.get("returncode"),
-        "stdout_tail": final.get("stdout_tail", ""), "stderr_tail": final.get("stderr_tail", ""),
-        "aligned_directory": str(canonical.relative_to(project)),
-        "missing_alignment": final.get("missing_alignment", []), "ok": accepted is not None,
-    })
+    report.update(
+        {
+            "dictionary": dictionary,
+            "acoustic_model": acoustic,
+            "command": final.get("command", []),
+            "returncode": final.get("returncode"),
+            "stdout_tail": final.get("stdout_tail", ""),
+            "stderr_tail": final.get("stderr_tail", ""),
+            "aligned_directory": str(canonical.relative_to(project)),
+            "missing_alignment": final.get("missing_alignment", []),
+            "ok": accepted is not None,
+        }
+    )
     write_json(paths["production"] / "forced-alignment.json", report)
     return report
+
 
 def _normalized_asr_with_evidence(
     text: str, equivalences: list[dict[str, str]]
@@ -364,7 +422,9 @@ def _finalize_verification_integrity(
     return report
 
 
-def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") -> dict[str, Any]:
+def verify(
+    project: Path, repo: Path, *, performance_profile: str = "legacy"
+) -> dict[str, Any]:
     import whisper
 
     paths = project_paths(project)
@@ -385,53 +445,102 @@ def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") ->
     asr_completed = 0
     asr_cache_hits = 0
     asr_expected = len(candidates) * 2
+    asr_started_at = _utc_now()
 
     def record_asr_progress(model: str, relative: str, cached: bool) -> None:
         nonlocal asr_completed, asr_cache_hits
         asr_completed += 1
         asr_cache_hits += int(cached)
-        write_json(asr_progress_path, {
-            "version": 1, "state": "running",
-            "completed_candidates": asr_completed,
-            "expected_candidates": asr_expected, "cache_hits": asr_cache_hits,
-            "active_model": model, "last_completed_file": relative,
-            "advisory_only": True,
-        })
+        write_json(
+            asr_progress_path,
+            {
+                "version": 2,
+                "state": "running",
+                "started_at": asr_started_at,
+                "updated_at": _utc_now(),
+                "completed_candidates": asr_completed,
+                "expected_candidates": asr_expected,
+                "cache_hits": asr_cache_hits,
+                "active_model": model,
+                "active_file": relative,
+                "last_completed_file": relative,
+                "advisory_only": True,
+            },
+        )
 
-    write_json(asr_progress_path, {
-        "version": 1, "state": "running", "completed_candidates": 0,
-        "expected_candidates": asr_expected, "cache_hits": 0,
-        "active_model": "loading", "last_completed_file": None,
-        "advisory_only": True,
-    })
+    write_json(
+        asr_progress_path,
+        {
+            "version": 2,
+            "state": "running",
+            "started_at": asr_started_at,
+            "updated_at": _utc_now(),
+            "completed_candidates": 0,
+            "expected_candidates": asr_expected,
+            "cache_hits": 0,
+            "active_model": "loading",
+            "active_file": None,
+            "last_completed_file": None,
+            "advisory_only": True,
+        },
+    )
     try:
         primary_texts, primary_hits, primary_misses = _cached_transcripts(
-            whisper, project=project, candidates=candidates,
-            checkpoint=primary_path, decode=PRIMARY_DECODE, cache=asr_cache,
-            model_label="large-v3-turbo", progress=record_asr_progress,
+            whisper,
+            project=project,
+            candidates=candidates,
+            checkpoint=primary_path,
+            decode=PRIMARY_DECODE,
+            cache=asr_cache,
+            model_label="large-v3-turbo",
+            progress=record_asr_progress,
         )
         secondary_texts, secondary_hits, secondary_misses = _cached_transcripts(
-            whisper, project=project, candidates=candidates,
-            checkpoint=secondary_path, decode=SECONDARY_DECODE, cache=asr_cache,
-            model_label="base", progress=record_asr_progress,
+            whisper,
+            project=project,
+            candidates=candidates,
+            checkpoint=secondary_path,
+            decode=SECONDARY_DECODE,
+            cache=asr_cache,
+            model_label="base",
+            progress=record_asr_progress,
         )
     except BaseException as error:
-        write_json(asr_progress_path, {
-            "version": 1, "state": "failed",
-            "completed_candidates": asr_completed,
-            "expected_candidates": asr_expected, "cache_hits": asr_cache_hits,
-            "active_model": None,
-            "error": {"type": type(error).__name__, "message": str(error)},
-            "advisory_only": True,
-        })
+        write_json(
+            asr_progress_path,
+            {
+                "version": 2,
+                "state": "failed",
+                "started_at": asr_started_at,
+                "updated_at": _utc_now(),
+                "completed_at": _utc_now(),
+                "completed_candidates": asr_completed,
+                "expected_candidates": asr_expected,
+                "cache_hits": asr_cache_hits,
+                "active_model": None,
+                "active_file": None,
+                "error": {"type": type(error).__name__, "message": str(error)},
+                "advisory_only": True,
+            },
+        )
         raise
-    write_json(asr_progress_path, {
-        "version": 1, "state": "complete",
-        "completed_candidates": asr_completed,
-        "expected_candidates": asr_expected, "cache_hits": asr_cache_hits,
-        "active_model": None, "last_completed_file": None,
-        "advisory_only": True,
-    })
+    write_json(
+        asr_progress_path,
+        {
+            "version": 2,
+            "state": "complete",
+            "started_at": asr_started_at,
+            "updated_at": _utc_now(),
+            "completed_at": _utc_now(),
+            "completed_candidates": asr_completed,
+            "expected_candidates": asr_expected,
+            "cache_hits": asr_cache_hits,
+            "active_model": None,
+            "active_file": None,
+            "last_completed_file": None,
+            "advisory_only": True,
+        },
+    )
     save_asr_cache(asr_cache_path, asr_cache)
     lexicon = load_reviewed_lexicon(project)
     equivalents = asr_equivalences(lexicon)
@@ -463,6 +572,17 @@ def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") ->
             second_error = Levenshtein.distance(expected, second) / max(
                 1, len(expected)
             )
+            phrase_evidence = (
+                reviewed_phrase_equivalence(
+                    expected=expected,
+                    primary=first,
+                    secondary=second,
+                    lexicon=lexicon,
+                    candidate=take,
+                )
+                if first_error > 0.01 or second_error > 0.01
+                else None
+            )
             acoustic = _acoustic_checks(mono, rate, len(expected))
             attempt = {
                 **take,
@@ -472,9 +592,14 @@ def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") ->
                 "secondary_asr_equivalences": second_equivalences,
                 "primary_wer": round(first_error, 4),
                 "secondary_wer": round(second_error, 4),
+                "protected_phrase_evidence": phrase_evidence,
                 "duration_seconds": len(mono) / rate,
                 "acoustic_failures": acoustic,
-                "ok": first_error <= 0.01 and second_error <= 0.01 and not acoustic,
+                "ok": (
+                    (first_error <= 0.01 and second_error <= 0.01)
+                    or phrase_evidence is not None
+                )
+                and not acoustic,
             }
             seconds_per_word = attempt["duration_seconds"] / max(1, len(expected))
             attempt["quality_vector"] = {
@@ -525,7 +650,9 @@ def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") ->
             continue
         failures.append(unit_id)
     alignment = (
-        run_mfa_alignment(project, repo, selected, performance_profile=performance_profile)
+        run_mfa_alignment(
+            project, repo, selected, performance_profile=performance_profile
+        )
         if selected
         else {"ok": False, "failure": "no verified takes"}
     )
@@ -553,7 +680,10 @@ def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") ->
     write_json(paths["production"] / "verification.json", report)
     _finalize_verification_integrity(project, report)
     write_json(paths["production"] / "verification.json", report)
-    write_json(paths["production"] / "pronunciation-audit.json", {"version": 1, **lexicon_report})
+    write_json(
+        paths["production"] / "pronunciation-audit.json",
+        {"version": 1, **lexicon_report},
+    )
     duration_rows = [
         {
             "unit": row["id"],

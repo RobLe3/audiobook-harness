@@ -1,6 +1,6 @@
 # Quality contract
 
-This document describes Audiobook Harness **0.4.4**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.5**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 The local production contract is: analyse, review pronunciation-sensitive terms,
 generate bounded deterministic candidates, verify every candidate, stage a
@@ -56,16 +56,15 @@ before the final verified selection existed.
 ## Reviewed pronunciation equivalences
 
 A reviewed lexicon entry can represent either a single protected term or a
-complete phrase. It may include `asr_equivalents` only for documented spellings
-emitted by the local ASR decoders. Every such entry requires an IPA override, a
-source, and `review_status: reviewed`.
+complete phrase. Single terms may include documented decoder spellings.
+Multi-token foreign phrases instead use `validation_policy:
+reviewed_phrase_equivalence`; arbitrary phrase aliases are not substituted.
 
-Equivalences are used solely after synthesis for transcript comparison. They do
-not change manuscript text, TTS input, IPA, forced alignment, acoustic checks,
-or exact checks on surrounding words. The verification record identifies which
-equivalence each ASR decoder used. A familiar-looking ASR spelling is never
-sufficient reason to add an alias: first confirm the intended pronunciation and
-both decoder outputs.
+Phrase equivalence is accepted only when the reviewed phrase occurs exactly
+once, its IPA was applied to the hash-bound candidate, both decoders preserve
+all surrounding words exactly, and both phrase renderings meet the bounded
+similarity check. Exact-ASR policies, ambiguous occurrences, context leakage,
+ordinary-word differences, or missing pronunciation evidence remain blocking.
 
 Unicode dashes and closed/hyphenated compounds compare as the same word (for
 example, `start-up` and `startup`). A separated phrase such as `start up` is not
@@ -78,8 +77,8 @@ remain explicit project-local lexicon entries.
   "spoken": "Example Name",
   "phoneme_override": "...",
   "language": "example-language",
-  "scope": "term",
-  "asr_equivalents": ["documented decoder spelling"],
+  "scope": "phrase",
+  "validation_policy": "reviewed_phrase_equivalence",
   "source": "Reliable pronunciation source",
   "review_status": "reviewed"
 }
@@ -100,10 +99,11 @@ contract carries its source timestamp and the PID of the production command.
 If that command is gone, a previously `running` snapshot is marked interrupted;
 it is never treated as proof of current work.
 
-Dual-ASR verification also writes `production/asr-progress.json`. It reports
-completed candidates, cache hits, the active local checkpoint, and the last
-completed file. The file is explicitly advisory and cannot satisfy any
-verification, staging, or promotion gate.
+Dual-ASR verification also writes timestamped `production/asr-progress.json`.
+It reports completed candidates, cache hits, the active checkpoint/file, and
+`active`, `slow_but_active`, `stalled`, `failed`, or `complete` activity.
+This process evidence is advisory and cannot satisfy a quality or publication
+gate.
 
 The harness intentionally does not ship sound effects, music, cloned voices,
 cloud services, telemetry, synthetic scene audio, or automatic asset retrieval.

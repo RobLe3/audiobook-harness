@@ -76,6 +76,23 @@ def test_term_equivalence_is_applied_with_audit_evidence():
     ]
 
 
+def test_asr_activity_keeps_slow_live_worker_distinct_from_stall():
+    from audiobook_harness.status import classify_asr_activity
+
+    assert (
+        classify_asr_activity(
+            state="running", worker_active=True, evidence_age_seconds=420
+        )
+        == "slow_but_active"
+    )
+    assert (
+        classify_asr_activity(
+            state="running", worker_active=False, evidence_age_seconds=901
+        )
+        == "stalled"
+    )
+
+
 def test_acoustic_checks_reject_long_silence_and_clipping():
     import numpy as np
     from audiobook_harness.quality import _acoustic_checks
@@ -91,19 +108,34 @@ def test_asr_cache_key_changes_with_every_evidence_input():
     from audiobook_harness.asr_cache import evidence_key
 
     base = evidence_key(
-        audio_sha256="audio", model_sha256="model", decode={"beam_size": 5}, device="cpu"
+        audio_sha256="audio",
+        model_sha256="model",
+        decode={"beam_size": 5},
+        device="cpu",
     )
     assert base != evidence_key(
-        audio_sha256="other", model_sha256="model", decode={"beam_size": 5}, device="cpu"
+        audio_sha256="other",
+        model_sha256="model",
+        decode={"beam_size": 5},
+        device="cpu",
     )
     assert base != evidence_key(
-        audio_sha256="audio", model_sha256="other", decode={"beam_size": 5}, device="cpu"
+        audio_sha256="audio",
+        model_sha256="other",
+        decode={"beam_size": 5},
+        device="cpu",
     )
     assert base != evidence_key(
-        audio_sha256="audio", model_sha256="model", decode={"beam_size": 1}, device="cpu"
+        audio_sha256="audio",
+        model_sha256="model",
+        decode={"beam_size": 1},
+        device="cpu",
     )
     assert base != evidence_key(
-        audio_sha256="audio", model_sha256="model", decode={"beam_size": 5}, device="mps"
+        audio_sha256="audio",
+        model_sha256="model",
+        decode={"beam_size": 5},
+        device="mps",
     )
 
 
@@ -123,9 +155,13 @@ def test_asr_progress_callback_reports_completed_decode(tmp_path):
     checkpoint.write_bytes(b"model")
     events = []
     texts, hits, misses = _cached_transcripts(
-        Whisper(), project=tmp_path, candidates=[{"file": "take.flac"}],
-        checkpoint=checkpoint, decode={"fp16": False},
-        cache={"version": 1, "entries": {}}, model_label="primary",
+        Whisper(),
+        project=tmp_path,
+        candidates=[{"file": "take.flac"}],
+        checkpoint=checkpoint,
+        decode={"fp16": False},
+        cache={"version": 1, "entries": {}},
+        model_label="primary",
         progress=lambda model, relative, cached: events.append(
             (model, relative, cached)
         ),
@@ -140,5 +176,7 @@ def test_only_worker_runtime_failures_qualify_for_serial_fallback():
 
     assert _transient_alignment_failure("resource_tracker leaked semaphore objects")
     assert _transient_alignment_failure("Broken pipe while worker process started")
-    assert not _transient_alignment_failure("dictionary contains an out-of-vocabulary word")
+    assert not _transient_alignment_failure(
+        "dictionary contains an out-of-vocabulary word"
+    )
     assert not _transient_alignment_failure("alignment output is incomplete")

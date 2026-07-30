@@ -1,10 +1,13 @@
 # Changelog
 
-## 0.4.4
+## 0.4.5
 
-- Add advisory cue-level dual-ASR progress with cache-hit and active-model detail.
-- Keep review work bound to the current audio identity and disable stale panels while corrected media is being generated.
-- Preserve receipt-based phase reuse; progress evidence never authorizes publication.
+- Unify production resume reporting on the public eight-phase contract.
+- Add objective, hash-bound phase-scoped repair receipts that preserve valid
+  predecessor phases without waiving quality gates.
+- Add evidence-bound multi-token foreign-phrase ASR segmentation handling.
+- Serve identity-safe review actions, media, drafts, finalization, and advisory
+  ASR activity from one loopback-only review process.
 
 ## 0.4.3
 

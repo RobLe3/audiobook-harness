@@ -8,6 +8,7 @@ from typing import Any
 
 from . import __version__
 from .project import write_json
+from .run_journal import phase_receipt_is_valid, valid_phase_repair_receipt
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,18 @@ PHASES = (
 )
 
 
+def execution_start_phase(phase: int | None) -> int | None:
+    """Map an evidence phase to the earliest phase of its atomic local action."""
+
+    if phase is None or phase <= 1:
+        return phase
+    if phase <= 3:
+        return 2
+    if phase == 4:
+        return 4
+    return 5
+
+
 def pipeline_contract() -> dict[str, Any]:
     payload: dict[str, Any] = {
         "version": 1,
@@ -106,3 +119,56 @@ def audit_pipeline(project: Path) -> dict[str, Any]:
     }
     write_json(production / "pipeline-audit.json", report)
     return report
+
+
+def resume_plan(project: Path, *, input_identity: str) -> dict[str, Any]:
+    """Plan one eight-phase resume using receipts and an optional repair scope."""
+
+    repair = valid_phase_repair_receipt(project, current_input_identity=input_identity)
+    owner = int(repair["owner_phase"]) if repair else None
+    base_identity = str(repair["base_input_identity"]) if repair else input_identity
+    rows = []
+    blocked = False
+    for phase in PHASES:
+        identity = (
+            base_identity
+            if owner is not None and phase.number < owner
+            else input_identity
+        )
+        reusable = (
+            not blocked
+            and (owner is None or phase.number < owner)
+            and phase_receipt_is_valid(
+                project, step=phase.number, input_identity=identity
+            )
+        )
+        if not reusable:
+            blocked = True
+        rows.append(
+            {
+                "phase": phase.number,
+                "name": phase.name,
+                "action": "REUSE" if reusable else "RUN",
+                "reason": (
+                    "hash-bound phase receipt is current"
+                    if reusable
+                    else "phase-scoped repair owns this phase"
+                    if owner == phase.number
+                    else "first incomplete or dependent phase"
+                ),
+            }
+        )
+    start = next((row["phase"] for row in rows if row["action"] == "RUN"), None)
+    effective_start = execution_start_phase(start)
+    if effective_start is not None and effective_start != start:
+        for row in rows:
+            if effective_start <= int(row["phase"]) < int(start):
+                row["action"] = "RUN"
+                row["reason"] = "atomic production action also owns this phase"
+    return {
+        "version": 1,
+        "input_identity": input_identity,
+        "repair": repair,
+        "phases": rows,
+        "start_phase": effective_start,
+    }

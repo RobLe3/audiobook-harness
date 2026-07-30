@@ -9,7 +9,7 @@ from . import __version__
 from .feedback import compile_feedback, promote_rule
 from .measurements import build_quality_measurements
 from .parity import feature_parity
-from .pipeline import audit_pipeline
+from .pipeline import PHASES, audit_pipeline, resume_plan
 from .analysis import analyze
 from .project import scaffold
 from .performance import resolve_profile
@@ -22,7 +22,7 @@ from .resilience import (
 )
 from .status import render_status, watch, write_run_status
 from .tts import generate, promote, stage, stage_manifest_is_valid
-from .run_journal import phase_receipt_is_valid, write_phase_receipt
+from .run_journal import write_phase_receipt
 from .review import finalize_review, serve_review
 from .migration import apply_upgrade, upgrade_plan
 from .versioning import compatibility_receipt
@@ -101,13 +101,7 @@ def _run(project: Path, name: str, action):
     return result
 
 
-PRODUCTION_STEPS = (
-    "analyze manuscript and pronunciation requirements",
-    "generate bounded deterministic candidates",
-    "verify with dual ASR, acoustics, and forced alignment",
-    "repair only failed candidate units",
-    "stage hash-bound verified deliverables",
-)
+PRODUCTION_STEPS = tuple(phase.name for phase in PHASES)
 
 
 def _production_progress(
@@ -147,38 +141,44 @@ def produce(
     retries = 0
     phase_index = 0
     phase_artifacts = {
-        1: [production / "analysis.json"],
-        2: [production / "candidates.json", production / "generation.json"],
-        3: [production / "verification.json", production / "forced-alignment.json"],
-        4: [production / "verification.json"],
-        5: [production / "stage-manifest.json"],
+        phase.number: [production / name for name in phase.required_artifacts]
+        for phase in PHASES
     }
-    first_step = 1
-    if resume:
-        for step in range(1, len(PRODUCTION_STEPS) + 1):
-            receipt_valid = phase_receipt_is_valid(
-                project, step=step, input_identity=input_identity
-            )
-            if step == 5 and receipt_valid:
-                receipt_valid = stage_manifest_is_valid(project, output)
-            if not receipt_valid:
-                first_step = step
-                break
-        else:
-            first_step = len(PRODUCTION_STEPS) + 1
+    plan = (
+        resume_plan(project, input_identity=input_identity)
+        if resume
+        else {
+            "start_phase": 1,
+            "phases": [
+                {
+                    "phase": phase.number,
+                    "name": phase.name,
+                    "action": "RUN",
+                    "reason": "new production",
+                }
+                for phase in PHASES
+            ],
+        }
+    )
+    if (
+        resume
+        and plan.get("start_phase") is None
+        and not stage_manifest_is_valid(project, output)
+    ):
+        plan["start_phase"] = 5
+        for row in plan["phases"]:
+            if int(row["phase"]) >= 5:
+                row["action"] = "RUN"
+                row["reason"] = "staged media is missing, changed, or stale"
+    first_step = int(plan.get("start_phase") or len(PHASES) + 1)
     if dry_run:
         return {
             "ok": True,
             "dry_run": True,
             "input_identity": input_identity,
-            "phases": [
-                {
-                    "step": step,
-                    "name": name,
-                    "action": "REUSE" if step < first_step else "RUN",
-                }
-                for step, name in enumerate(PRODUCTION_STEPS, 1)
-            ],
+            "start_phase": plan.get("start_phase"),
+            "repair": plan.get("repair"),
+            "phases": plan["phases"],
         }
 
     def progress(index: int, phase: str) -> None:
@@ -207,32 +207,27 @@ def produce(
         else:
             analysis = json.loads(phase_artifacts[1][0].read_text(encoding="utf-8"))
         phase_index = 1
-        if first_step <= 2:
+        if first_step <= 3:
             progress(1, PRODUCTION_STEPS[1])
             generation = generate(project, REPO)
-            write_phase_receipt(
-                project,
-                step=2,
-                input_identity=input_identity,
-                artifacts=phase_artifacts[2],
-            )
+            for step in (2, 3):
+                write_phase_receipt(
+                    project,
+                    step=step,
+                    input_identity=input_identity,
+                    artifacts=phase_artifacts[step],
+                )
         else:
             generation = json.loads(
                 (production / "candidates.json").read_text(encoding="utf-8")
             )
-        phase_index = 2
-        if first_step <= 3:
-            progress(2, PRODUCTION_STEPS[2])
+        phase_index = 3
+        if first_step <= 4:
+            progress(3, PRODUCTION_STEPS[3])
             verification = verify(
                 project,
                 REPO,
                 performance_profile=performance_profile,
-            )
-            write_phase_receipt(
-                project,
-                step=3,
-                input_identity=input_identity,
-                artifacts=phase_artifacts[3],
             )
         else:
             verification = json.loads(
@@ -251,7 +246,7 @@ def produce(
             if decision.get("retry") is True:
                 retries += 1
                 generate(project, REPO, failed_only=True)
-                progress(2, f"{PRODUCTION_STEPS[2]} after bounded repair")
+                progress(3, f"{PRODUCTION_STEPS[3]} after bounded repair")
                 verification = verify(
                     project,
                     REPO,
@@ -281,34 +276,25 @@ def produce(
             # A bounded repair rewrites both candidates and verification.
             # Refresh their owning receipts so a later resume sees the final
             # verified bytes rather than the pre-repair rejection.
-            write_phase_receipt(
-                project,
-                step=2,
-                input_identity=input_identity,
-                artifacts=phase_artifacts[2],
-            )
-            write_phase_receipt(
-                project,
-                step=3,
-                input_identity=input_identity,
-                artifacts=phase_artifacts[3],
-            )
-            write_phase_receipt(
-                project,
-                step=4,
-                input_identity=input_identity,
-                artifacts=phase_artifacts[4],
-            )
-        phase_index = 4
-        if first_step <= 5:
+            completed_steps = (2, 3, 4) if retries or first_step <= 3 else (4,)
+            for step in completed_steps:
+                write_phase_receipt(
+                    project,
+                    step=step,
+                    input_identity=input_identity,
+                    artifacts=phase_artifacts[step],
+                )
+        phase_index = 5
+        if first_step <= 8:
             progress(phase_index, PRODUCTION_STEPS[phase_index])
             staged = stage(project, output)
-            write_phase_receipt(
-                project,
-                step=5,
-                input_identity=input_identity,
-                artifacts=phase_artifacts[5],
-            )
+            for step in (5, 6, 7, 8):
+                write_phase_receipt(
+                    project,
+                    step=step,
+                    input_identity=input_identity,
+                    artifacts=phase_artifacts[step],
+                )
         else:
             staged = json.loads(
                 (production / "stage-manifest.json").read_text(encoding="utf-8")

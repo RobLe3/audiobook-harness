@@ -1,6 +1,6 @@
 # Audiobook Harness Skill
 
-This document describes Audiobook Harness **0.4.4**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.5**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 Use this skill when an author wants a local, verified audiobook.
 
@@ -16,7 +16,10 @@ Use this skill when an author wants a local, verified audiobook.
 7. Prefer `produce` for a monitored staged run. It may repair failed units once
    and must keep every verification threshold unchanged. For manual operation,
    run `generate`, then `verify`; use `retry` only for failed units.
-8. Treat a term- or phrase-level ASR equivalence as valid only when reviewed IPA, source, exact lexicon scope, dual-ASR evidence, and alignment evidence are present. Record it in the project lexicon; never add a broad correction for an ordinary word.
+8. Keep single-term decoder spellings narrow. For a multi-token foreign phrase,
+   require reviewed IPA, language, `reviewed_phrase_equivalence`, exact
+   surrounding words in both ASR passes, and current candidate/alignment
+   evidence; never add cue-specific phrase aliases.
 9. Monitor `status --watch`, inspect staged audio and verification evidence,
    and save review decisions through the loopback review panel. Rejections and
    uncertain decisions require a defect category; `other` also needs a note.

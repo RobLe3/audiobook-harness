@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes Audiobook Harness **0.4.4**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.5**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 The harness owns one eight-phase graph: analysis, synthesis, candidate
 realization, cue QA, pre-mix gating, assembly, post-mix QA, and packaging.
@@ -52,17 +52,19 @@ input or harness change produces a different identity.
 
 ## Interruption-safe phase reuse
 
-`produce --resume --dry-run` validates the input-bound receipt for each
-completed phase and reports `REUSE` or `RUN` before loading a model or changing
-media. `produce --resume` then starts at the first missing, changed, or
-unverified phase. Earlier valid phases and input-addressed, waveform-hashed candidate audio
-remain in place.
+`produce --resume --dry-run` and `produce --resume` use the same eight-phase
+planner. Each phase reports `REUSE` or `RUN` and a reason before a model loads
+or media changes. A hash-bound `phase-repair-receipt.json` may retain phases
+before one objectively repaired owning phase; that phase and every dependent
+phase still rerun.
 
 A receipt binds the production input identity and exact artifact hashes.
 Changed manuscript, configuration, lexicon, model lock, harness code, or
 artifact bytes invalidate the affected phase and its downstream evidence. An
 interruption never triggers a clean project restart. Candidate repair still
 regenerates only the failed unit IDs, and no quality threshold is relaxed.
+Repair evidence must be current, machine-readable, explicitly passing, and
+bound to the changed dependency bytes. It is never human approval.
 
 Staging is the end of unattended authority. Promotion remains a separate
 command so the listener can inspect the verification report and staged audio

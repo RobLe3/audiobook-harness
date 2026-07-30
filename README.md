@@ -1,6 +1,6 @@
 # Audiobook Harness
 
-Current release: **0.4.4**. Audiobook Harness uses one SemVer product identity;
+Current release: **0.4.5**. Audiobook Harness uses one SemVer product identity;
 project names and profile hashes do not create a second harness version. See
 [versioning and compatibility](docs/VERSIONING.md).
 
@@ -108,7 +108,7 @@ container check; it never pulls an image or downloads a model.
 
 ## v0.4 review gate
 
-Version 0.4.4 writes source-preserving analysis contracts for structure, spoken
+Version 0.4.5 writes source-preserving analysis contracts for structure, spoken
 forms, dialogue, prosody and TTS risk. After staging, run
 `audiobook-harness review PROJECT`; the loopback service saves review drafts
 directly under `production/`. Finalize decisions in the panel or with
@@ -120,7 +120,7 @@ and the documented repetition or editorial-authority threshold. Existing
 projects can inspect an upgrade with `audiobook-harness upgrade-project
 PROJECT`; applying it requires the reported inventory hash.
 
-Version 0.4.4 also exposes the production contract directly:
+Version 0.4.5 also exposes the production contract directly:
 
 ```bash
 audiobook-harness pipeline-audit PROJECT
@@ -131,3 +131,9 @@ audiobook-harness feature-parity PROJECT
 The parity report is evidence-based. A capability is passing only when its
 required, current artifact exists. It does not turn a declared project feature
 or an old receipt into proof of current quality.
+
+`produce --resume --dry-run` and execution now share the same eight-phase
+planner. A phase-scoped repair may preserve earlier hash-valid work, but the
+owning phase and every downstream phase must rerun. The loopback review server
+uses one port for media, current status, autosave, and finalization, and disables
+controls whenever the review identity is stale.

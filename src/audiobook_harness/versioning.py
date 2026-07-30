@@ -37,7 +37,7 @@ def compatibility_receipt(project: Path, *, apply: bool = False) -> dict[str, An
     payload: dict[str, Any] = {
         "version": 1,
         "product_version": __version__,
-        "historical_artifact_family": "pre-semver-nordlicht",
+        "historical_artifact_family": "pre-semver-project",
         "inputs": inputs,
         "artifacts": artifacts,
         "legacy_receipts_immutable": True,

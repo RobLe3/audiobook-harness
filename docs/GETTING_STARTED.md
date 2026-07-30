@@ -1,6 +1,6 @@
 # First audiobook in one sitting
 
-This document describes Audiobook Harness **0.4.4**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.5**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 This guide assumes you have the right to make an audiobook from the manuscript
 and to use the chosen voice. It uses no cloud TTS, telemetry, or hidden
@@ -37,9 +37,10 @@ fallbacks.
 7. Review `lexicon.json`. For each identified sensitive term, add a
    `phoneme_override` and set `review_status` to `reviewed`. Do **not** guess a
    phonetic spelling: listen to a small test or use a reliable pronunciation
-   source. If both local ASR decoders later use a different spelling for a
-   correctly reviewed name or phrase, add that spelling only as a documented
-   project-local `asr_equivalents` entry; it never changes the narration input.
+   source. A single term may carry a documented decoder spelling. A reviewed
+   multi-token foreign phrase must instead declare `scope: phrase`, its
+   language, and `validation_policy: reviewed_phrase_equivalence`; do not add
+   cue-specific phrase aliases.
 8. Run `produce`. It generates bounded deterministic candidates, verifies them
    with two local Whisper decoders, acoustic checks and per-take local MFA
    alignment, adds one bounded candidate repair only for failed units, and

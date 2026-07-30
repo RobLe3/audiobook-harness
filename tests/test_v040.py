@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from audiobook_harness.contracts import build_analysis_contracts
 from audiobook_harness.migration import apply_upgrade, upgrade_plan
-from audiobook_harness.review import finalize_review, review_is_approved
+from audiobook_harness.review import finalize_review, review_is_approved, review_status
 
 
 def test_contracts_preserve_structure_and_separate_spoken_forms(tmp_path: Path):
@@ -44,6 +44,23 @@ def test_review_requires_exact_manifest_identity(tmp_path: Path):
     manifest["review_identity_sha256"] = "changed"
     (production / "review-manifest.json").write_text(json.dumps(manifest))
     assert not review_is_approved(tmp_path)
+
+
+def test_review_status_disables_review_when_generation_failed(tmp_path: Path):
+    production = tmp_path / "production"
+    production.mkdir()
+    (production / "review-manifest.json").write_text(
+        json.dumps({"review_identity_sha256": "new"})
+    )
+    (production / "review-decisions.json").write_text(
+        json.dumps({"ok": True, "review_identity_sha256": "old"})
+    )
+    (production / "run-status.json").write_text(
+        json.dumps({"state": "failed", "phase": "cue_qa"})
+    )
+    status = review_status(tmp_path)
+    assert status["reviewer_action"]["code"] == "generation_blocked"
+    assert not status["reviewer_action"]["enabled"]
 
 
 def test_upgrade_is_inventory_bound(tmp_path: Path):

@@ -32,7 +32,10 @@ def test_normalized_words_treats_hyphenated_compounds_as_closed_words():
 
 def test_normalized_words_treats_en_and_em_dashes_as_boundaries():
     assert normalized_words("alpha—beta gamma–delta") == [
-        "alpha", "beta", "gamma", "delta"
+        "alpha",
+        "beta",
+        "gamma",
+        "delta",
     ]
 
 
@@ -119,9 +122,48 @@ def test_reviewed_term_and_phrase_asr_equivalences_require_evidence():
     }
     pairs = asr_equivalences(lexicon)
     assert [(row["observed"], row["expected"], row["scope"]) for row in pairs] == [
-        ("Example Frase", "Example Phrase", "phrase"),
         ("Example Naim", "Example Name", "term"),
     ]
+
+
+def test_reviewed_phrase_equivalence_is_bounded_to_one_foreign_phrase():
+    from audiobook_harness.pronunciation import reviewed_phrase_equivalence
+
+    candidate = {
+        "sha256": "audio",
+        "phonemes": "before f o n e m after",
+        "pronunciation_occurrences": [{"published": "Nom Étranger"}],
+    }
+    lexicon = {
+        "Nom Étranger": {
+            "review_status": "reviewed",
+            "scope": "phrase",
+            "language": "fr",
+            "validation_policy": "reviewed_phrase_equivalence",
+            "spoken": "nom etranger",
+            "phoneme_override": "f o n e m",
+            "source": "reviewed source",
+        }
+    }
+    result = reviewed_phrase_equivalence(
+        expected=["before", "nom", "etranger", "after"],
+        primary=["before", "nometrajer", "after"],
+        secondary=["before", "nom", "etrajer", "after"],
+        lexicon=lexicon,
+        candidate=candidate,
+    )
+    assert result is not None
+    assert result["outside_phrase_exact"]
+    assert (
+        reviewed_phrase_equivalence(
+            expected=["before", "nom", "etranger", "after"],
+            primary=["wrong", "nometrajer", "after"],
+            secondary=["before", "nom", "etrajer", "after"],
+            lexicon=lexicon,
+            candidate=candidate,
+        )
+        is None
+    )
 
 
 def test_asr_equivalences_without_pronunciation_evidence_are_rejected(tmp_path: Path):

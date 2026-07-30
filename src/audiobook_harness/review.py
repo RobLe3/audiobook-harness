@@ -14,6 +14,7 @@ from . import __version__
 from .feedback import append_observations, validate_decisions
 from .parity import project_profile_identity
 from .project import write_json
+from .status import asr_activity, owner_activity
 
 
 def _canonical(value: object) -> str:
@@ -210,6 +211,64 @@ def review_is_approved(project: Path) -> bool:
     )
 
 
+def review_status(project: Path) -> dict[str, Any]:
+    """Return identity-safe reviewer instructions from the current local state."""
+
+    production = project / "production"
+
+    def read(name: str) -> dict[str, Any]:
+        try:
+            value = json.loads((production / name).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    run = read("run-status.json")
+    manifest = read("review-manifest.json")
+    decisions = read("review-decisions.json")
+    draft = read("review-draft.json")
+    owner, _detail = owner_activity(run)
+    current = manifest.get("review_identity_sha256")
+    authoritative = decisions.get("review_identity_sha256")
+    draft_identity = draft.get("review_identity_sha256")
+    state = str(run.get("state", "not_started"))
+    if state == "running" and owner == "active":
+        action = "wait_for_generation"
+        enabled = False
+    elif state == "failed":
+        action = "generation_blocked"
+        enabled = False
+    elif not current:
+        action = "await_review_media"
+        enabled = False
+    elif decisions.get("ok") and authoritative == current:
+        action = "none"
+        enabled = False
+    elif draft.get("decisions") and draft_identity == current:
+        action = "complete_decisions"
+        enabled = True
+    else:
+        action = "listen_and_finalize"
+        enabled = True
+    return {
+        "version": 1,
+        "audiobook_harness_version": __version__,
+        "generation": {
+            "state": state,
+            "phase": run.get("phase"),
+            "owner": owner,
+        },
+        "current_review_identity_sha256": current,
+        "authoritative_review_identity_sha256": authoritative,
+        "draft_review_identity_sha256": draft_identity,
+        "draft_matches_current_identity": bool(current and draft_identity == current),
+        "review_available": bool(current),
+        "reviewer_action": {"code": action, "enabled": enabled},
+        "asr": asr_activity(project, worker_active=owner == "active"),
+        "review_only": True,
+    }
+
+
 def serve_review(project: Path, host: str, port: int) -> None:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("review server is loopback-only")
@@ -263,6 +322,8 @@ function decisions(){{return [...document.querySelectorAll("section")].filter(s=
 let timer;document.addEventListener("input",()=>{{clearTimeout(timer);timer=setTimeout(async()=>{{const r=await fetch("/api/review-draft",{{method:"PUT",headers,body:JSON.stringify({{decisions:decisions()}})}});document.querySelector("#status").textContent=r.ok?"Saved locally.":"Save error."; }},250);}});
 fetch("/api/review-draft").then(r=>r.json()).then(v=>{{for(const d of v.decisions||[]){{const s=document.querySelector(`section[data-id="${{CSS.escape(d.id)}}"]`);if(!s)continue;s.querySelector(".decision").value=d.decision||"";s.querySelector(".category").value=d.defect_category||"";s.querySelector(".note").value=d.note||"";}}}});
 document.querySelector("#finalize").onclick=async()=>{{const r=await fetch("/api/finalize-review",{{method:"POST",headers,body:JSON.stringify({{decisions:decisions()}})}});const v=await r.json();document.querySelector("#status").textContent=v.ok?"Finalized and approved.":(v.error||"Finalized with unresolved items.");}};
+async function refreshStatus(){{const r=await fetch("/api/status",{{cache:"no-store"}});if(!r.ok)return;const v=await r.json();const enabled=Boolean(v.reviewer_action?.enabled);document.querySelector("#finalize").disabled=!enabled;document.querySelectorAll("audio,select,input").forEach(x=>x.disabled=!enabled);document.querySelector("#status").textContent=enabled?"Current review media is ready. Decisions save locally.":`Reviewer action: ${{v.reviewer_action?.code||"unavailable"}}`;}}
+refreshStatus();setInterval(refreshStatus,5000);
 </script>"""
 
     class Handler(SimpleHTTPRequestHandler):
@@ -305,7 +366,31 @@ document.querySelector("#finalize").onclick=async()=>{{const r=await fetch("/api
                     if path.is_file()
                     else {"decisions": []}
                 )
+                try:
+                    current = json.loads(
+                        (project / "production/review-manifest.json").read_text()
+                    ).get("review_identity_sha256")
+                except (OSError, json.JSONDecodeError):
+                    current = None
+                if value.get("review_identity_sha256") != current:
+                    value = {
+                        "decisions": [],
+                        "stale": True,
+                        "review_identity_sha256": current,
+                    }
                 self._respond(200, value)
+                return
+            if route == "/api/status":
+                self._respond(200, review_status(project))
+                return
+            if route == "/api/review-manifest":
+                try:
+                    value = json.loads(
+                        (project / "production/review-manifest.json").read_text()
+                    )
+                    self._respond(200, value)
+                except (OSError, json.JSONDecodeError):
+                    self._respond(404, {"ok": False, "error": "review unavailable"})
                 return
             if route.startswith("/api/unit-audio/"):
                 unit_id = route.rsplit("/", 1)[-1]

@@ -1,6 +1,6 @@
 # Audiobook Harness agent contract
 
-This document describes Audiobook Harness **0.4.4**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.5**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 Use the local staged workflow only:
 
@@ -16,6 +16,9 @@ For an unattended staged run, use `audiobook-harness produce <project>`. It
 runs the same gates, permits at most one failed-unit candidate repair, and
 never promotes automatically. Do not bypass its input-bound recovery ledger or
 convert a quality rejection into a generic process retry.
+Use `produce --resume --dry-run` before resuming. Its eight-phase plan is the
+same plan execution consumes; a phase repair may preserve only predecessor
+receipts backed by current objective evidence.
 
 The legacy `release` command is intentionally disabled because direct publication
 bypasses staged review. Never write generated media directly to `deliverables/`.
