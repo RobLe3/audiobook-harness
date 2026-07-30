@@ -7,7 +7,7 @@ from audiobook_harness.pipeline import PHASES, audit_pipeline, pipeline_contract
 
 def test_pipeline_contract_declares_contiguous_eight_phase_graph():
     contract = pipeline_contract()
-    assert contract["audiobook_harness_version"] == "0.4.3"
+    assert contract["audiobook_harness_version"] == "0.4.4"
     assert [row["number"] for row in contract["phases"]] == list(range(1, 9))
     assert [phase.number for phase in PHASES] == list(range(1, 9))
 

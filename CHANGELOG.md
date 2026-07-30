@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.4
+
+- Add advisory cue-level dual-ASR progress with cache-hit and active-model detail.
+- Keep review work bound to the current audio identity and disable stale panels while corrected media is being generated.
+- Preserve receipt-based phase reuse; progress evidence never authorizes publication.
+
 ## 0.4.3
 
 - Establish Audiobook Harness 0.4.x as the sole current harness identity.

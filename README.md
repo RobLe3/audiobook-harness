@@ -1,6 +1,6 @@
 # Audiobook Harness
 
-Current release: **0.4.3**. Audiobook Harness uses one SemVer product identity;
+Current release: **0.4.4**. Audiobook Harness uses one SemVer product identity;
 project names and profile hashes do not create a second harness version. See
 [versioning and compatibility](docs/VERSIONING.md).
 
@@ -31,6 +31,11 @@ snapshot **interrupted** rather than pretending work is still running. A failed
 or completed run is explicitly labelled historical. This makes it safe to
 monitor a long operation from a second terminal without confusing an old render
 of the progress file for a live job.
+
+During dual-ASR verification, `production/asr-progress.json` records the
+completed candidate count, active checkpoint, cache hits, and last completed
+file. This is advisory progress only; transcripts, hashes, alignment, and the
+verification report remain the release evidence.
 
 `produce` runs analysis, candidate generation, dual-ASR and MFA verification,
 one bounded failed-unit repair, and staging as one monitored command. It never
@@ -103,7 +108,7 @@ container check; it never pulls an image or downloads a model.
 
 ## v0.4 review gate
 
-Version 0.4.3 writes source-preserving analysis contracts for structure, spoken
+Version 0.4.4 writes source-preserving analysis contracts for structure, spoken
 forms, dialogue, prosody and TTS risk. After staging, run
 `audiobook-harness review PROJECT`; the loopback service saves review drafts
 directly under `production/`. Finalize decisions in the panel or with
@@ -115,7 +120,7 @@ and the documented repetition or editorial-authority threshold. Existing
 projects can inspect an upgrade with `audiobook-harness upgrade-project
 PROJECT`; applying it requires the reported inventory hash.
 
-Version 0.4.3 also exposes the production contract directly:
+Version 0.4.4 also exposes the production contract directly:
 
 ```bash
 audiobook-harness pipeline-audit PROJECT

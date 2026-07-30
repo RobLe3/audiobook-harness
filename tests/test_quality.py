@@ -1,5 +1,6 @@
 from audiobook_harness.quality import (
     _alignment_complete,
+    _cached_transcripts,
     _finalize_verification_integrity,
     _mfa_profile,
 )
@@ -104,6 +105,34 @@ def test_asr_cache_key_changes_with_every_evidence_input():
     assert base != evidence_key(
         audio_sha256="audio", model_sha256="model", decode={"beam_size": 5}, device="mps"
     )
+
+
+def test_asr_progress_callback_reports_completed_decode(tmp_path):
+    class Model:
+        def transcribe(self, path, **decode):
+            return {"text": f"decoded {path}"}
+
+    class Whisper:
+        @staticmethod
+        def load_model(path, device):
+            return Model()
+
+    (tmp_path / "production").mkdir()
+    (tmp_path / "take.flac").write_bytes(b"audio")
+    checkpoint = tmp_path / "model.pt"
+    checkpoint.write_bytes(b"model")
+    events = []
+    texts, hits, misses = _cached_transcripts(
+        Whisper(), project=tmp_path, candidates=[{"file": "take.flac"}],
+        checkpoint=checkpoint, decode={"fp16": False},
+        cache={"version": 1, "entries": {}}, model_label="primary",
+        progress=lambda model, relative, cached: events.append(
+            (model, relative, cached)
+        ),
+    )
+    assert texts["take.flac"].startswith("decoded")
+    assert (hits, misses) == (0, 1)
+    assert events == [("primary", "take.flac", False)]
 
 
 def test_only_worker_runtime_failures_qualify_for_serial_fallback():

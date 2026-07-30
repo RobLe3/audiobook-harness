@@ -5,7 +5,7 @@ import gc
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import soundfile as sf
@@ -33,6 +33,8 @@ def _cached_transcripts(
     checkpoint: Path,
     decode: dict[str, object],
     cache: dict[str, Any],
+    model_label: str = "asr",
+    progress: Callable[[str, str, bool], None] | None = None,
 ) -> tuple[dict[str, str], int, int]:
     """Return local CPU transcripts, loading a model only when evidence misses."""
     model_sha256 = sha256(checkpoint)
@@ -54,6 +56,8 @@ def _cached_transcripts(
         if isinstance(cached, dict) and isinstance(cached.get("text"), str):
             texts[relative] = str(cached["text"])
             hits += 1
+            if progress is not None:
+                progress(model_label, relative, True)
         else:
             pending.append((take, audio_sha256, key))
     if not pending:
@@ -72,6 +76,8 @@ def _cached_transcripts(
             "text": text,
         }
         save_asr_cache(project / "production" / "asr-evidence-cache.json", cache)
+        if progress is not None:
+            progress(model_label, relative, False)
     misses = len(pending)
     del model
     gc.collect()
@@ -374,23 +380,58 @@ def verify(project: Path, repo: Path, *, performance_profile: str = "legacy") ->
             "Whisper primary/secondary models missing; run explicit model setup"
         )
     asr_cache_path = paths["production"] / "asr-evidence-cache.json"
+    asr_progress_path = paths["production"] / "asr-progress.json"
     asr_cache = load_asr_cache(asr_cache_path)
-    primary_texts, primary_hits, primary_misses = _cached_transcripts(
-        whisper,
-        project=project,
-        candidates=candidates,
-        checkpoint=primary_path,
-        decode=PRIMARY_DECODE,
-        cache=asr_cache,
-    )
-    secondary_texts, secondary_hits, secondary_misses = _cached_transcripts(
-        whisper,
-        project=project,
-        candidates=candidates,
-        checkpoint=secondary_path,
-        decode=SECONDARY_DECODE,
-        cache=asr_cache,
-    )
+    asr_completed = 0
+    asr_cache_hits = 0
+    asr_expected = len(candidates) * 2
+
+    def record_asr_progress(model: str, relative: str, cached: bool) -> None:
+        nonlocal asr_completed, asr_cache_hits
+        asr_completed += 1
+        asr_cache_hits += int(cached)
+        write_json(asr_progress_path, {
+            "version": 1, "state": "running",
+            "completed_candidates": asr_completed,
+            "expected_candidates": asr_expected, "cache_hits": asr_cache_hits,
+            "active_model": model, "last_completed_file": relative,
+            "advisory_only": True,
+        })
+
+    write_json(asr_progress_path, {
+        "version": 1, "state": "running", "completed_candidates": 0,
+        "expected_candidates": asr_expected, "cache_hits": 0,
+        "active_model": "loading", "last_completed_file": None,
+        "advisory_only": True,
+    })
+    try:
+        primary_texts, primary_hits, primary_misses = _cached_transcripts(
+            whisper, project=project, candidates=candidates,
+            checkpoint=primary_path, decode=PRIMARY_DECODE, cache=asr_cache,
+            model_label="large-v3-turbo", progress=record_asr_progress,
+        )
+        secondary_texts, secondary_hits, secondary_misses = _cached_transcripts(
+            whisper, project=project, candidates=candidates,
+            checkpoint=secondary_path, decode=SECONDARY_DECODE, cache=asr_cache,
+            model_label="base", progress=record_asr_progress,
+        )
+    except BaseException as error:
+        write_json(asr_progress_path, {
+            "version": 1, "state": "failed",
+            "completed_candidates": asr_completed,
+            "expected_candidates": asr_expected, "cache_hits": asr_cache_hits,
+            "active_model": None,
+            "error": {"type": type(error).__name__, "message": str(error)},
+            "advisory_only": True,
+        })
+        raise
+    write_json(asr_progress_path, {
+        "version": 1, "state": "complete",
+        "completed_candidates": asr_completed,
+        "expected_candidates": asr_expected, "cache_hits": asr_cache_hits,
+        "active_model": None, "last_completed_file": None,
+        "advisory_only": True,
+    })
     save_asr_cache(asr_cache_path, asr_cache)
     lexicon = load_reviewed_lexicon(project)
     equivalents = asr_equivalences(lexicon)

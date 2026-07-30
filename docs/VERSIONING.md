@@ -1,15 +1,16 @@
 # Versioning and legacy compatibility
 
-Audiobook Harness **0.4.3** is the current product release. It adds
-manifest-bound listener-feedback records, local draft persistence, conservative
-default promotion, and listener-history preflight evidence. Product releases
-use SemVer and are independent of report-schema integers, dependency versions,
-and local model or asset revisions.
+Audiobook Harness **0.4.4** is the current product release. It adds
+advisory candidate-level dual-ASR progress while preserving hash-bound
+verification and phase reuse. It retains the manifest-bound listener-feedback,
+local draft, conservative default-promotion, and listener-history contracts
+introduced in 0.4.3. Product releases use SemVer and are independent of
+report-schema integers, dependency versions, and local model or asset revisions.
 
 NORDLICHT is a project using Audiobook Harness, not a separate harness release.
 Historical pre-SemVer project artifacts remain immutable and reusable through
 their hashes, but their former project-local labels are not exposed as current
-product versions. New reports identify the product as `0.4.3` and bind the
+product versions. New reports identify the product as `0.4.4` and bind the
 project configuration through `project_profile_sha256`.
 
 Run `audiobook-harness compatibility-audit PROJECT` to inspect a receipt without writing it. Add `--apply` to store `production/version-compatibility-receipt.json`. The receipt hashes existing analysis, candidate, verification, and alignment evidence without rewriting those artifacts or their historical receipts. Missing or changed evidence is never silently accepted.

@@ -1,6 +1,6 @@
 # Quality contract
 
-This document describes Audiobook Harness **0.4.3**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.4**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 The local production contract is: analyse, review pronunciation-sensitive terms,
 generate bounded deterministic candidates, verify every candidate, stage a
@@ -99,6 +99,11 @@ JSON lifecycle state and its readable Markdown progress view. The progress
 contract carries its source timestamp and the PID of the production command.
 If that command is gone, a previously `running` snapshot is marked interrupted;
 it is never treated as proof of current work.
+
+Dual-ASR verification also writes `production/asr-progress.json`. It reports
+completed candidates, cache hits, the active local checkpoint, and the last
+completed file. The file is explicitly advisory and cannot satisfy any
+verification, staging, or promotion gate.
 
 The harness intentionally does not ship sound effects, music, cloned voices,
 cloud services, telemetry, synthetic scene audio, or automatic asset retrieval.
