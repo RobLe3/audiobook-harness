@@ -22,6 +22,10 @@ from .selection_integrity import audit_candidate_selection
 from .review import build_review, review_is_approved
 from .context_protocol import protocol_for_unit
 from .measurements import build_quality_measurements
+from .candidate_scheduler import (
+    build_candidate_strategy_ledger,
+    candidate_budget_by_unit,
+)
 
 SAMPLE_RATE = 24_000
 VARIANTS = (("baseline", 0.0), ("slower", -0.01), ("faster", 0.01))
@@ -86,6 +90,9 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
 
     paths, config = project_paths(project), load_project(project)
     analysis = json.loads((paths["production"] / "analysis.json").read_text())
+    candidate_plan = json.loads(
+        (paths["production"] / "candidate-plan.json").read_text()
+    )
     if not audit_lexicon(project)["ok"] or analysis.get(
         "contextual_dialogue_review_required"
     ):
@@ -117,7 +124,15 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
         "kokoro_onnx_version": importlib.metadata.version("kokoro-onnx"),
         "synthesis_contract_version": SYNTHESIS_CONTRACT_VERSION,
     }
-    candidates: list[dict[str, Any]] = []
+    existing = (
+        json.loads((paths["production"] / "candidates.json").read_text())
+        if (paths["production"] / "candidates.json").exists()
+        else {"candidates": []}
+    )
+    candidates: list[dict[str, Any]] = (
+        list(existing.get("candidates", [])) if failed_only else []
+    )
+    budgets = candidate_budget_by_unit(candidate_plan)
     for chapter in analysis["chapters"]:
         for unit in chapter["units"]:
             unit_id, text = str(unit["id"]), str(unit["text"])
@@ -131,7 +146,17 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
             )
             source_hash = _source_hash(unit)
             context_protocol = protocol_for_unit(unit)
-            for name, delta in RETRY_VARIANTS if failed_only else VARIANTS:
+            prior_unit_rows = [
+                row for row in candidates if str(row.get("id")) == unit_id
+            ]
+            prior_names = {str(row.get("candidate")) for row in prior_unit_rows}
+            prior_hashes = {str(row.get("sha256")) for row in prior_unit_rows}
+            variants = RETRY_VARIANTS[3:] if failed_only else VARIANTS
+            for name, delta in variants:
+                if name in prior_names or len(prior_unit_rows) >= budgets.get(
+                    unit_id, 3
+                ):
+                    continue
                 actual_speed = max(0.85, min(1.05, speed + delta))
                 audio, rate = engine.create(
                     phonemes,
@@ -169,44 +194,39 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
                     subtype="PCM_24",
                     format="FLAC",
                 )
-                candidates.append(
-                    {
-                        "id": unit_id,
-                        "chapter": chapter["id"],
-                        "candidate": name,
-                        "text": text,
-                        "phonemes": phonemes,
-                        "voice": voice,
-                        "speed": actual_speed,
-                        "file": str(target.relative_to(project)),
-                        "sha256": sha256(target),
-                        "source_hash": source_hash,
-                        "chapter_index": int(unit["chapter_index"]),
-                        "unit_index": int(unit["unit_index"]),
-                        "global_sequence": int(unit["global_sequence"]),
-                        "source_span": unit.get("source_span"),
-                        "pronunciation_occurrences": pronunciation_occurrences,
-                        **engine_identity,
-                        "source_sentence_indexes": unit.get(
-                            "source_sentence_indexes", []
-                        ),
-                        "context_strategy": unit.get(
-                            "context_strategy", "complete_sentence"
-                        ),
-                        "contains_terse_dialogue": bool(
-                            unit.get("contains_terse_dialogue", False)
-                        ),
-                    }
-                )
-    existing = (
-        json.loads((paths["production"] / "candidates.json").read_text())
-        if (paths["production"] / "candidates.json").exists()
-        else {"candidates": []}
-    )
-    if failed_only:
-        candidates = [
-            row for row in existing["candidates"] if row["id"] not in failed
-        ] + candidates
+                digest = sha256(target)
+                if digest in prior_hashes:
+                    target.unlink(missing_ok=True)
+                    continue
+                row = {
+                    "id": unit_id,
+                    "chapter": chapter["id"],
+                    "candidate": name,
+                    "text": text,
+                    "phonemes": phonemes,
+                    "voice": voice,
+                    "speed": actual_speed,
+                    "file": str(target.relative_to(project)),
+                    "sha256": digest,
+                    "strategy_family": "native_micro_pace",
+                    "source_hash": source_hash,
+                    "chapter_index": int(unit["chapter_index"]),
+                    "unit_index": int(unit["unit_index"]),
+                    "global_sequence": int(unit["global_sequence"]),
+                    "source_span": unit.get("source_span"),
+                    "pronunciation_occurrences": pronunciation_occurrences,
+                    **engine_identity,
+                    "source_sentence_indexes": unit.get("source_sentence_indexes", []),
+                    "context_strategy": unit.get(
+                        "context_strategy", "complete_sentence"
+                    ),
+                    "contains_terse_dialogue": bool(
+                        unit.get("contains_terse_dialogue", False)
+                    ),
+                }
+                candidates.append(row)
+                prior_unit_rows.append(row)
+                prior_hashes.add(digest)
     candidates.sort(
         key=lambda row: (
             int(row["chapter_index"]),
@@ -223,6 +243,14 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
         "candidates": candidates,
     }
     write_json(paths["production"] / "candidates.json", report)
+    write_json(
+        paths["production"] / "candidate-strategy-ledger.json",
+        build_candidate_strategy_ledger(
+            candidate_plan,
+            candidates,
+            failures=sorted(failed),
+        ),
+    )
     write_json(
         paths["production"] / "generation.json",
         {

@@ -45,6 +45,7 @@ PHASES = (
             "verification.json",
             "forced-alignment.json",
             "candidate-selection-integrity.json",
+            "candidate-strategy-ledger.json",
             "quality-measurements.json",
         ),
     ),

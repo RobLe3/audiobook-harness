@@ -14,6 +14,7 @@ from rapidfuzz.distance import Levenshtein
 
 from . import __version__
 from .measurements import build_quality_measurements
+from .candidate_scheduler import build_candidate_strategy_ledger
 from .project import load_project, normalized_words, project_paths, sha256, write_json
 from .pronunciation import (
     asr_equivalences,
@@ -678,6 +679,17 @@ def verify(
         },
     }
     write_json(paths["production"] / "verification.json", report)
+    candidate_plan = json.loads(
+        (paths["production"] / "candidate-plan.json").read_text(encoding="utf-8")
+    )
+    write_json(
+        paths["production"] / "candidate-strategy-ledger.json",
+        build_candidate_strategy_ledger(
+            candidate_plan,
+            candidates,
+            failures=failures,
+        ),
+    )
     _finalize_verification_integrity(project, report)
     write_json(paths["production"] / "verification.json", report)
     write_json(

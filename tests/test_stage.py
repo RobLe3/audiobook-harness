@@ -155,7 +155,7 @@ def _verified_stage(
     (project / "production/stage-manifest.json").write_text(json.dumps(manifest))
     review = build_review(project, stage)
     assert review["version"] == 3
-    assert review["audiobook_harness_version"] == "0.4.5"
+    assert review["audiobook_harness_version"] == "0.4.6"
     finalize_review(
         project, [{"id": row["id"], "decision": "approve"} for row in review["items"]]
     )
@@ -305,6 +305,9 @@ def test_produce_repairs_failed_units_once_then_stages(
         (value / "production/forced-alignment.json").write_text('{"ok":true}')
         (value / "production/candidate-selection-integrity.json").write_text(
             '{"ok":true}'
+        )
+        (value / "production/candidate-strategy-ledger.json").write_text(
+            '{"version":1,"units":[]}'
         )
         (value / "production/quality-measurements.json").write_text('{"ok":true}')
         return result

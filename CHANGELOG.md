@@ -1,7 +1,11 @@
 # Changelog
 
-## 0.4.5
+## 0.4.6
 
+- Add an evidence-led candidate strategy ledger and retain hash-valid candidates
+  while bounded retries add only untried, unique alternatives.
+- Prevent duplicate or already-generated retry variants from consuming the
+  per-unit candidate budget.
 - Unify production resume reporting on the public eight-phase contract.
 - Add objective, hash-bound phase-scoped repair receipts that preserve valid
   predecessor phases without waiving quality gates.
