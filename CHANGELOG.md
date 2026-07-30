@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2
+
+- Save local review drafts and finalized decisions without requiring downloads.
+- Record categorized listener feedback in an append-only, hash-bound ledger.
+- Compile feedback summaries and gate listener-derived default promotion.
+- Add listener-history preflight evidence to manuscript analysis.
+
 ## 0.4.0
 
 - Adds source-preserving manuscript, spoken-form, dialogue, prosody, risk and performance-unit contracts.

@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes Audiobook Harness **0.4.1**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.2**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
 
 The harness keeps source analysis, candidate generation, verification, staging,
 and publication separate. Each UTF-8 chapter becomes source-preserving semantic

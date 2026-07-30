@@ -1,6 +1,6 @@
 # Quality contract
 
-This document describes Audiobook Harness **0.4.1**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.2**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
 
 The local production contract is: analyse, review pronunciation-sensitive terms,
 generate bounded deterministic candidates, verify every candidate, stage a
@@ -102,6 +102,25 @@ it is never treated as proof of current work.
 
 The harness intentionally does not ship sound effects, music, cloned voices,
 cloud services, telemetry, synthetic scene audio, or automatic asset retrieval.
+
+## Listener-derived defaults
+
+Finalized review decisions are copied into
+`production/listener-feedback-ledger.jsonl` with their review and audio
+identities. A rejection or uncertain decision requires a defect category;
+`other` also requires a note. The original evidence is append-only.
+
+`compile-feedback` validates and summarizes the ledger. A rule in
+`listener-derived-defaults.json` can be promoted only after its replacement
+passes objective verification, receives follow-up listener approval, and passes
+regression checks. It additionally needs explicit editorial authority, three
+distinct occurrences, or evidence from two episodes. Project evidence never
+silently changes package-wide defaults.
+
+Analysis records the defaults revision, hash, and every matching rule in
+`listener-defaults-preflight.json`. A defaults change therefore invalidates
+only work whose bound analysis inputs changed; it does not authorize deletion
+of unrelated candidates, ASR entries, alignments, or receipts.
 
 ## Durable runs
 

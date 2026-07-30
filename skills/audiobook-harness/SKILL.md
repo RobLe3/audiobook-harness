@@ -1,6 +1,6 @@
 # Audiobook Harness Skill
 
-This document describes Audiobook Harness **0.4.1**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.2**. Product and legacy contract versioning is defined in `docs/VERSIONING.md`.
 
 Use this skill when an author wants a local, verified audiobook.
 
@@ -18,8 +18,12 @@ Use this skill when an author wants a local, verified audiobook.
    run `generate`, then `verify`; use `retry` only for failed units.
 8. Treat a term- or phrase-level ASR equivalence as valid only when reviewed IPA, source, exact lexicon scope, dual-ASR evidence, and alignment evidence are present. Record it in the project lexicon; never add a broad correction for an ordinary word.
 9. Monitor `status --watch`, inspect staged audio and verification evidence,
-   and run `promote` only after verification passes. Never copy staged media
-   manually.
+   and save review decisions through the loopback review panel. Rejections and
+   uncertain decisions require a defect category; `other` also needs a note.
+10. Run `compile-feedback` after finalization. Apply only promoted rules from
+    `listener-derived-defaults.json` during the next analysis.
+11. Run `promote` only after verification and the current manifest-bound
+    listening review pass. Never copy staged media manually.
 
 ## Rules
 
@@ -28,4 +32,9 @@ Use this skill when an author wants a local, verified audiobook.
 - Never delete or bypass the input-bound recovery ledger to force another
   identical automatic retry.
 - Never treat an ASR score alone as subjective proof; keep review evidence for accepted exceptions.
+- Never promote listener feedback without a verified correction, follow-up
+  listener approval, and a clean regression result. Three occurrences, two
+  episodes, or explicit editorial authority are additionally required.
+- Preserve the original note, audio hash, correction identity, and follow-up
+  result in the append-only feedback ledger.
 - Do not clone voices without explicit rights and user instruction.

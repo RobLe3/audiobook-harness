@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 from . import __version__
+from .feedback import compile_feedback, promote_rule
 from .analysis import analyze
 from .project import scaffold
 from .performance import resolve_profile
@@ -370,6 +371,8 @@ def main() -> None:
         "status",
         "review",
         "finalize-review",
+        "compile-feedback",
+        "promote-feedback",
     ):
         command = sub.add_parser(name)
         command.add_argument("project", type=Path)
@@ -404,6 +407,8 @@ def main() -> None:
             command.add_argument("--port", type=int, default=8765)
         if name == "finalize-review":
             command.add_argument("decisions", type=Path)
+        if name == "promote-feedback":
+            command.add_argument("rule_id")
         if name == "status":
             command.add_argument("--watch", action="store_true")
     args = parser.parse_args()
@@ -446,6 +451,12 @@ def main() -> None:
     if args.command == "finalize-review":
         value = json.loads(args.decisions.read_text(encoding="utf-8"))
         emit(finalize_review(project, value.get("decisions", value)))
+        return
+    if args.command == "compile-feedback":
+        emit(compile_feedback(project))
+        return
+    if args.command == "promote-feedback":
+        emit(promote_rule(project, args.rule_id))
         return
     if args.command == "produce":
         emit(

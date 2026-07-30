@@ -1,6 +1,6 @@
 # Audiobook Harness
 
-Current release: **0.4.1**. See [versioning and legacy compatibility](docs/VERSIONING.md).
+Current release: **0.4.2**. See [versioning and legacy compatibility](docs/VERSIONING.md).
 
 A local-first, evidence-based audiobook production harness for coding agents.
 It focuses on manuscript analysis, pronunciation control, contextual dialogue,
@@ -101,4 +101,14 @@ container check; it never pulls an image or downloads a model.
 
 ## v0.4 review gate
 
-Version 0.4.1 writes source-preserving analysis contracts for structure, spoken forms, dialogue, prosody and TTS risk. After staging, run `audiobook-harness review PROJECT`, record decisions, and finalize them with `audiobook-harness finalize-review PROJECT decisions.json`. Promotion requires a finalized, manifest-bound approval set. Existing projects can inspect an upgrade with `audiobook-harness upgrade-project PROJECT`; applying it requires the reported inventory hash.
+Version 0.4.2 writes source-preserving analysis contracts for structure, spoken
+forms, dialogue, prosody and TTS risk. After staging, run
+`audiobook-harness review PROJECT`; the loopback service saves review drafts
+directly under `production/`. Finalize decisions in the panel or with
+`audiobook-harness finalize-review PROJECT decisions.json`, then run
+`audiobook-harness compile-feedback PROJECT`. Rejections become traceable
+observations, not automatic global defaults. Promoting a learned rule requires
+a verified correction, follow-up listening approval, clean regression evidence,
+and the documented repetition or editorial-authority threshold. Existing
+projects can inspect an upgrade with `audiobook-harness upgrade-project
+PROJECT`; applying it requires the reported inventory hash.

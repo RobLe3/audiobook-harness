@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .feedback import defaults_identity, historical_matches, load_defaults
 from .project import normalized_words, write_json
 
 
@@ -27,6 +28,8 @@ def build_analysis_contracts(
     prosody: list[dict[str, Any]] = []
     risks: list[dict[str, Any]] = []
     units: list[dict[str, Any]] = []
+    learned_defaults = load_defaults(project)
+    learned_defaults_sha256 = defaults_identity(learned_defaults)
     structured = re.compile(r"\b(?:\d{1,2}:\d{2}|\d+(?:[.,/]\d+)*%?|[A-Z]{2,})\b")
     for chapter in chapters:
         text = str(chapter["text"])
@@ -68,6 +71,7 @@ def build_analysis_contracts(
             words = normalized_words(value)
             quote = value.lstrip().startswith(('"', "“"))
             factors = []
+            learned = historical_matches(project, value)
             if len(words) <= 5:
                 factors.append("short_fragment")
             if len(words) >= 35:
@@ -76,6 +80,8 @@ def build_analysis_contracts(
                 factors.append("dialogue")
             if structured.search(value):
                 factors.append("structured_spoken_form")
+            if learned:
+                factors.append("listener_history")
             score = min(
                 100, len(factors) * 20 + (15 if "…" in value or "..." in value else 0)
             )
@@ -124,6 +130,8 @@ def build_analysis_contracts(
                     if risk == "medium"
                     else 3,
                     "mandatory_review": risk == "high",
+                    "listener_derived_defaults": learned,
+                    "listener_derived_defaults_sha256": learned_defaults_sha256,
                 }
             )
             for match in structured.finditer(value):
@@ -162,6 +170,16 @@ def build_analysis_contracts(
         },
         "tts-risk-map.json": {"version": 1, "units": risks},
         "performance-units.json": {"version": 1, "units": units},
+        "listener-defaults-preflight.json": {
+            "version": 1,
+            "defaults_sha256": learned_defaults_sha256,
+            "defaults_revision": learned_defaults.get("revision", 0),
+            "matches": [
+                {"unit": row["unit"], "rules": row["listener_derived_defaults"]}
+                for row in risks
+                if row["listener_derived_defaults"]
+            ],
+        },
     }
     for name, report in reports.items():
         report["identity_sha256"] = _identity(report)
