@@ -221,21 +221,37 @@ def apply_to_phonemes_with_evidence(
     evidence: list[dict[str, Any]] = []
     for start, end, surface, published, row in sorted(occurrences):
         default = str(phonemize(surface))
-        if default not in resolved:
+        patterns = [
+            default,
+            *[str(value) for value in row.get("context_phoneme_patterns", [])],
+        ]
+        compact = published.replace(" ", "")
+        if (
+            row.get("category") == "initialism"
+            and compact.upper().endswith("A")
+            and default.endswith("ˈeɪ")
+        ):
+            prefix = default[: -len("ˈeɪ")]
+            patterns.extend(f"{prefix}{vowel}" for vowel in ("ɐ", "ə", "ᵊ"))
+        matched_default = next(
+            (pattern for pattern in dict.fromkeys(patterns) if pattern in resolved),
+            None,
+        )
+        if matched_default is None:
             raise ValueError(
                 f"Cannot apply lexicon phonemes for occurrence {published} at {start}:{end}"
             )
         override = str(row["phoneme_override"])
         before = resolved
-        phoneme_start = before.find(default)
-        resolved = before.replace(default, override, 1)
+        phoneme_start = before.find(matched_default)
+        resolved = before.replace(matched_default, override, 1)
         evidence.append(
             {
                 "published": published,
                 "surface": surface,
                 "source_span": [start, end],
                 "phoneme_span": [phoneme_start, phoneme_start + len(override)],
-                "default_phonemes": default,
+                "default_phonemes": matched_default,
                 "resolved_phonemes": override,
             }
         )

@@ -211,6 +211,25 @@ def test_pronunciation_override_applies_to_every_reviewed_occurrence():
     assert [row["source_span"] for row in evidence] == [[0, 6], [11, 17]]
 
 
+def test_initialism_override_locates_context_reduced_final_a():
+    from audiobook_harness.pronunciation import apply_to_phonemes_with_evidence
+
+    resolved, evidence = apply_to_phonemes_with_evidence(
+        "The CIA officer.",
+        "ðə sˈiː aɪ ɐ ˈɒfɪsə",
+        {
+            "CIA": {
+                "review_status": "reviewed",
+                "category": "initialism",
+                "phoneme_override": "sˈiː ˈaɪ ˈeɪ",
+            }
+        },
+        lambda _value: "sˈiː aɪ ˈeɪ",
+    )
+    assert resolved == "ðə sˈiː ˈaɪ ˈeɪ ˈɒfɪsə"
+    assert evidence[0]["default_phonemes"] == "sˈiː aɪ ɐ"
+
+
 def test_analysis_assigns_contiguous_immutable_unit_order(tmp_path: Path):
     template = Path(__file__).parents[1] / "templates/project"
     project = tmp_path / "book"

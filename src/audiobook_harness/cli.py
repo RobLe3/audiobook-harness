@@ -22,7 +22,7 @@ from .resilience import (
 )
 from .status import render_status, watch, write_run_status
 from .tts import generate, promote, stage, stage_manifest_is_valid
-from .run_journal import write_phase_receipt
+from .run_journal import invalidate_phase_receipts_from, write_phase_receipt
 from .review import finalize_review, serve_review
 from .migration import apply_upgrade, upgrade_plan
 from .versioning import compatibility_receipt
@@ -300,6 +300,7 @@ def produce(
                 (production / "stage-manifest.json").read_text(encoding="utf-8")
             )
     except BaseException as error:
+        invalidate_phase_receipts_from(project, step=phase_index + 1)
         write_run_status(
             project,
             state="failed",

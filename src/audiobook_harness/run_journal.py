@@ -32,6 +32,23 @@ def phase_receipt_path(project: Path, step: int) -> Path:
     return project / "production/phase-receipts" / f"step-{step}.json"
 
 
+def invalidate_phase_receipts_from(project: Path, *, step: int) -> list[Path]:
+    """Remove a failed phase's success claim and every downstream claim."""
+    if step < 1:
+        raise ValueError("step must be positive")
+    directory = project / "production/phase-receipts"
+    removed: list[Path] = []
+    for path in directory.glob("step-*.json"):
+        try:
+            receipt_step = int(path.stem.removeprefix("step-"))
+        except ValueError:
+            continue
+        if receipt_step >= step:
+            path.unlink()
+            removed.append(path)
+    return sorted(removed)
+
+
 def write_phase_receipt(
     project: Path,
     *,

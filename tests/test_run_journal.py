@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from audiobook_harness.run_journal import (
+    invalidate_phase_receipts_from,
     phase_receipt_is_valid,
     receipt_is_valid,
     write_phase_receipt,
@@ -8,6 +9,21 @@ from audiobook_harness.run_journal import (
     valid_phase_repair_receipt,
     write_phase_repair_receipt,
 )
+
+
+def test_phase_failure_invalidates_current_and_downstream_only(tmp_path: Path):
+    artifact = tmp_path / "production/artifact.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text('{"ok": true}')
+    for step in range(1, 5):
+        write_phase_receipt(
+            tmp_path, step=step, input_identity="inputs", artifacts=[artifact]
+        )
+    invalidate_phase_receipts_from(tmp_path, step=3)
+    assert phase_receipt_is_valid(tmp_path, step=1, input_identity="inputs")
+    assert phase_receipt_is_valid(tmp_path, step=2, input_identity="inputs")
+    assert not phase_receipt_is_valid(tmp_path, step=3, input_identity="inputs")
+    assert not phase_receipt_is_valid(tmp_path, step=4, input_identity="inputs")
 
 
 def test_stage_receipt_rejects_changed_output(tmp_path: Path):
