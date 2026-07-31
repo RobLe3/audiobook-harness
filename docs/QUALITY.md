@@ -1,6 +1,6 @@
 # Quality contract
 
-This document describes Audiobook Harness **0.4.8**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.9**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 Review authority is item-scoped. Rebuilding a review page does not invalidate
 an unchanged decision: the item identity binds its text, source audio,

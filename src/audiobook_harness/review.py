@@ -44,6 +44,67 @@ def review_item_identity(item: dict[str, Any]) -> str:
     )
 
 
+def listener_finding_identity(item: dict[str, Any]) -> str:
+    """Bind a defect finding to source semantics rather than one waveform."""
+
+    return _canonical(
+        {
+            key: item.get(key)
+            for key in (
+                "id",
+                "kind",
+                "published_text",
+                "spoken_text",
+                "source_span",
+                "defect_category",
+            )
+        }
+    )
+
+
+def carry_forward_findings(
+    old_manifest: dict[str, Any],
+    old_decisions: dict[str, Any],
+    new_manifest: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Carry unresolved defects across renders without carrying approval."""
+
+    old_items = {
+        str(row.get("id")): row
+        for row in old_manifest.get("items", [])
+        if isinstance(row, dict) and row.get("id")
+    }
+    new_items = {
+        str(row.get("id")): row
+        for row in new_manifest.get("items", [])
+        if isinstance(row, dict) and row.get("id")
+    }
+    findings = []
+    for decision in old_decisions.get("decisions", []):
+        if not isinstance(decision, dict) or decision.get("decision") != "reject":
+            continue
+        item_id = str(decision.get("id", ""))
+        old_item, new_item = old_items.get(item_id), new_items.get(item_id)
+        if not old_item or not new_item:
+            continue
+        old_identity = old_item.get(
+            "listener_finding_identity_sha256"
+        ) or listener_finding_identity({**old_item, **decision})
+        new_identity = listener_finding_identity({**new_item, **decision})
+        if old_identity != new_identity:
+            continue
+        findings.append(
+            {
+                "id": item_id,
+                "defect_category": decision.get("defect_category"),
+                "comment": decision.get("comment"),
+                "listener_finding_identity_sha256": new_identity,
+                "requires_new_waveform_review": True,
+            }
+        )
+    return findings
+
+
 def carry_forward_decisions(
     old_manifest: dict[str, Any],
     old_decisions: dict[str, Any],
@@ -206,6 +267,7 @@ def build_review(project: Path, stage: Path | None = None) -> dict[str, Any]:
             )
     for item in items:
         item["review_item_identity_sha256"] = review_item_identity(item)
+        item["listener_finding_identity_sha256"] = listener_finding_identity(item)
     manifest: dict[str, Any] = {
         "version": 3,
         "audiobook_harness_version": __version__,
@@ -228,6 +290,7 @@ def build_review(project: Path, stage: Path | None = None) -> dict[str, Any]:
     manifest["review_identity_sha256"] = _canonical(manifest)
     write_json(production / "review-manifest.json", manifest)
     carried = carry_forward_decisions(old_manifest, old_decisions, manifest)
+    findings = carry_forward_findings(old_manifest, old_decisions, manifest)
     if carried:
         write_json(
             production / "review-draft.json",
@@ -236,6 +299,15 @@ def build_review(project: Path, stage: Path | None = None) -> dict[str, Any]:
                 "review_identity_sha256": manifest["review_identity_sha256"],
                 "decisions": carried,
                 "carried_forward": True,
+            },
+        )
+    if findings:
+        write_json(
+            production / "listener-findings.json",
+            {
+                "version": 1,
+                "review_identity_sha256": manifest["review_identity_sha256"],
+                "findings": findings,
             },
         )
     return manifest

@@ -22,6 +22,7 @@ class GateDisposition(StrEnum):
     BLOCKED_EVIDENCE = "blocked_evidence"
     FATAL_TOOL_FAILURE = "fatal_tool_failure"
     BLOCKED_UNKNOWN = "blocked_unknown"
+    PHASE_CONTRACT_FAILURE = "phase_contract_failure"
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,9 @@ class GateResult:
     next_action: str = "none"
     remaining_attempts: int = 0
     detail: str = ""
+    attempt_id: str = ""
+    input_identity: str = ""
+    evidence_paths: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -50,6 +54,82 @@ class GateResult:
             GateDisposition.RETRY_TRANSIENT,
             GateDisposition.REPAIR_ARTIFACT,
         }
+
+
+@dataclass(frozen=True)
+class RepairTicket:
+    """One bounded repair whose execution must change its owning phase input."""
+
+    repair_id: str
+    gate: str
+    owner_phase: int
+    affected_units: tuple[str, ...]
+    action: str
+    input_identity: str
+    expected_input_delta: str
+    remaining_attempts: int = 1
+    fallback: GateDisposition = GateDisposition.REVIEW_REQUIRED
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def repair_ticket(result: GateResult, *, action: str, expected_input_delta: str) -> RepairTicket:
+    """Create a stable repair ticket from current-attempt gate evidence."""
+
+    value = {
+        "gate": result.gate,
+        "owner_phase": result.owner_phase,
+        "affected_units": sorted(result.affected_units),
+        "action": action,
+        "input_identity": result.input_identity,
+        "evidence_fingerprint": result.evidence_fingerprint,
+    }
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return RepairTicket(
+        repair_id=hashlib.sha256(encoded.encode("utf-8")).hexdigest(),
+        gate=result.gate,
+        owner_phase=result.owner_phase,
+        affected_units=result.affected_units,
+        action=action,
+        input_identity=result.input_identity,
+        expected_input_delta=expected_input_delta,
+        remaining_attempts=max(0, result.remaining_attempts),
+    )
+
+
+def validate_phase_commit(
+    *,
+    result: GateResult,
+    owned_artifacts: tuple[Path, ...],
+    attempt_id: str,
+) -> GateResult:
+    """Refuse a success receipt unless every declared phase output exists."""
+
+    if result.disposition != GateDisposition.PASS:
+        return result
+    missing = tuple(str(path) for path in owned_artifacts if not path.is_file())
+    if not missing:
+        return result
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {"attempt_id": attempt_id, "missing": sorted(missing)},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return GateResult(
+        gate="phase_output_contract",
+        disposition=GateDisposition.PHASE_CONTRACT_FAILURE,
+        owner_phase=result.owner_phase,
+        evidence_fingerprint=fingerprint,
+        affected_units=result.affected_units,
+        invalidated_artifacts=missing,
+        next_action="correct_harness_phase",
+        detail="The phase reported success without committing every owned artifact.",
+        attempt_id=attempt_id,
+        input_identity=result.input_identity,
+    )
 
 
 def production_input_identity(project: Path, repo: Path) -> str:
