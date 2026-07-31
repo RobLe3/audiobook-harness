@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from . import __version__
-from .feedback import append_observations, validate_decisions
+from .feedback import append_observations, compile_feedback, validate_decisions
 from .parity import project_profile_identity
 from .project import write_json
 from .status import asr_activity, owner_activity
@@ -192,6 +192,7 @@ def finalize_review(project: Path, decisions: list[dict[str, Any]]) -> dict[str,
     report["decisions_sha256"] = _canonical(decisions)
     write_json(production / "review-decisions.json", report)
     append_observations(project, manifest, decisions)
+    report["feedback"] = compile_feedback(project)
     return report
 
 
@@ -243,6 +244,9 @@ def review_status(project: Path) -> dict[str, Any]:
         enabled = False
     elif decisions.get("ok") and authoritative == current:
         action = "none"
+        enabled = False
+    elif decisions.get("finalized") and authoritative == current:
+        action = "corrections_queued"
         enabled = False
     elif draft.get("decisions") and draft_identity == current:
         action = "complete_decisions"

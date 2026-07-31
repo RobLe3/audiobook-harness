@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.7
+
+- Treat the PCM assembly tail as authoritative while allowing at most one
+  codec frame of AAC or MP3 timing variance in encoded-deliverable QA.
+- Compile hash-bound listener feedback immediately after review finalization.
+- Report finalized rejected or uncertain items as queued correction work rather
+  than asking the reviewer to finalize the same audio again.
+- Preserve phase-scoped continuation and keep generation separate from final
+  publication approval.
+
 ## 0.4.6
 
 - Add an evidence-led candidate strategy ledger and retain hash-valid candidates

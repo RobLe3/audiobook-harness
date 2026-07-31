@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import hashlib
@@ -26,6 +27,7 @@ from .candidate_scheduler import (
     build_candidate_strategy_ledger,
     candidate_budget_by_unit,
 )
+from .encoded_quality import encoded_tail_result
 
 SAMPLE_RATE = 24_000
 VARIANTS = (("baseline", 0.0), ("slower", -0.01), ("faster", 0.01))
@@ -501,6 +503,17 @@ def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
     root = _prepare_stage_directory(project, output)
     outputs = _package(project, list(verification["takes"]), root)
     ordered_takes = _validated_ordered_takes(project, list(verification["takes"]))
+    assembly = json.loads(
+        (paths["production"] / "assembly-manifest.json").read_text(encoding="utf-8")
+    )
+    assembly_by_chapter = {
+        str(row["chapter"]): row for row in assembly.get("chapters", [])
+    }
+    chapter_by_file = {
+        str(row["file"]): str(chapter["chapter"])
+        for chapter in outputs
+        for row in chapter["files"]
+    }
     expected_files = sorted(
         str(row["file"]) for chapter in outputs for row in chapter["files"]
     )
@@ -508,6 +521,17 @@ def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
     for relative in expected_files:
         target = root / relative
         probe = _probe_audio(target)
+        chapter = assembly_by_chapter.get(chapter_by_file.get(relative, ""), {})
+        units = chapter.get("units", []) if isinstance(chapter, dict) else []
+        master_tail = (
+            float(units[-1].get("pause_after_ms", 0)) / 1000 if units else 0.0
+        )
+        tail = encoded_tail_result(
+            master_tail_seconds=master_tail,
+            encoded_tail_seconds=probe.get("trailing_silence_seconds"),
+            codec=probe.get("codec"),
+            sample_rate=probe.get("sample_rate"),
+        )
         encoded_rows.append(
             {
                 "file": relative,
@@ -515,19 +539,26 @@ def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
                 **probe,
                 "ok": bool(probe.get("duration_seconds", 0) > 0)
                 and bool(probe.get("codec")),
+                "tail": tail,
             }
         )
+        encoded_rows[-1]["ok"] = bool(encoded_rows[-1]["ok"] and tail["ok"])
     encoded_quality = {
-        "version": 1,
+        "version": 2,
+        "tail_authority": "PCM assembly with one encoded codec-frame tolerance",
         "files": encoded_rows,
         "ok": bool(encoded_rows) and all(row["ok"] for row in encoded_rows),
     }
     write_json(
         paths["production"] / "encoded-deliverable-quality.json", encoded_quality
     )
-    assembly = json.loads(
-        (paths["production"] / "assembly-manifest.json").read_text(encoding="utf-8")
-    )
+    if not encoded_quality["ok"]:
+        failed = ", ".join(
+            str(row["file"]) for row in encoded_rows if not row.get("ok")
+        )
+        raise RuntimeError(
+            "Cannot stage: encoded deliverable quality failed for " + failed
+        )
     full_file_fidelity = {
         "version": 1,
         "ordered_units": [row["id"] for row in ordered_takes],
@@ -626,11 +657,46 @@ def _probe_audio(path: Path) -> dict[str, Any]:
         return {"codec": None, "duration_seconds": 0.0, "probe_error": result.stderr}
     value = json.loads(result.stdout)
     stream = (value.get("streams") or [{}])[0]
+    duration = float(value.get("format", {}).get("duration", 0))
+    silence = subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "info",
+            "-i",
+            str(path),
+            "-af",
+            "silencedetect=noise=-50dB:d=0.05",
+            "-f",
+            "null",
+            "-",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    starts = [
+        float(match)
+        for match in re.findall(r"silence_start:\s*(\d+(?:\.\d+)?)", silence.stderr)
+    ]
+    ends = [
+        float(match)
+        for match in re.findall(r"silence_end:\s*(\d+(?:\.\d+)?)", silence.stderr)
+    ]
+    trailing_silence = None
+    if starts:
+        last_start = starts[-1]
+        later_end = next(
+            (value for value in reversed(ends) if value >= last_start), None
+        )
+        if later_end is None or later_end >= duration - 0.05:
+            trailing_silence = max(0.0, duration - last_start)
     return {
         "codec": stream.get("codec_name"),
         "sample_rate": int(stream.get("sample_rate", 0)),
         "channels": int(stream.get("channels", 0)),
-        "duration_seconds": float(value.get("format", {}).get("duration", 0)),
+        "duration_seconds": duration,
+        "trailing_silence_seconds": trailing_silence,
     }
 
 

@@ -1,6 +1,6 @@
 # Quality contract
 
-This document describes Audiobook Harness **0.4.6**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.7**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 The local production contract is: analyse, review pronunciation-sensitive terms,
 generate bounded deterministic candidates, verify every candidate, stage a
@@ -92,6 +92,10 @@ carrying an ownership marker for the same project; dangerous and unrelated
 directories are rejected. `promote` recalculates the exact staged file set,
 hashes, byte counts, verification evidence, and candidate-selection integrity,
 then verifies the copied bytes before replacing project deliverables atomically.
+The PCM assembly owns the authored chapter tail. Encoded AAC and MP3 checks
+allow at most one codec frame of decoded timing variance and record the
+tolerance, measured delta, and result. Missing measurements or larger drift
+remain blocking and never conceal incomplete final speech.
 For a custom stage, use `promote <project> --from <stage-directory>`. The legacy
 direct `release` command is disabled. `status --watch` displays the
 JSON lifecycle state and its readable Markdown progress view. The progress
@@ -114,6 +118,9 @@ Finalized review decisions are copied into
 `production/listener-feedback-ledger.jsonl` with their review and audio
 identities. A rejection or uncertain decision requires a defect category;
 `other` also requires a note. The original evidence is append-only.
+Finalization refreshes the feedback summary immediately. A current rejection or
+uncertainty is reported as queued correction work; it does not ask the reviewer
+to finalize the same waveform again and does not grant release approval.
 
 `compile-feedback` validates and summarizes the ledger. A rule in
 `listener-derived-defaults.json` can be promoted only after its replacement

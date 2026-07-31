@@ -63,6 +63,32 @@ def test_review_status_disables_review_when_generation_failed(tmp_path: Path):
     assert not status["reviewer_action"]["enabled"]
 
 
+def test_finalized_rejection_is_correction_work_not_an_unavailable_review(
+    tmp_path: Path,
+):
+    production = tmp_path / "production"
+    production.mkdir()
+    manifest = {
+        "review_identity_sha256": "current",
+        "items": [{"id": "c1", "mandatory": True, "audio_sha256": "audio"}],
+    }
+    (production / "review-manifest.json").write_text(json.dumps(manifest))
+    report = finalize_review(
+        tmp_path,
+        [
+            {
+                "id": "c1",
+                "decision": "reject",
+                "defect_category": "stretch_or_timing",
+            }
+        ],
+    )
+    assert report["feedback"]["ok"]
+    status = review_status(tmp_path)
+    assert status["reviewer_action"]["code"] == "corrections_queued"
+    assert not status["reviewer_action"]["enabled"]
+
+
 def test_upgrade_is_inventory_bound(tmp_path: Path):
     (tmp_path / "production").mkdir()
     plan = upgrade_plan(tmp_path)
