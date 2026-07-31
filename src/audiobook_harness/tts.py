@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import hashlib
 import importlib.metadata
+import os
 from pathlib import Path
 from typing import Any
 
@@ -18,15 +19,13 @@ from .pronunciation import (
     apply_to_phonemes_with_evidence,
     audit_lexicon,
     load_reviewed_lexicon,
+    pronunciation_context_preflight,
 )
 from .selection_integrity import audit_candidate_selection
 from .review import build_review, review_is_approved
 from .context_protocol import protocol_for_unit
 from .measurements import build_quality_measurements
-from .candidate_scheduler import (
-    build_candidate_strategy_ledger,
-    candidate_budget_by_unit,
-)
+from .candidate_scheduler import candidate_budget_by_unit
 from .encoded_quality import encoded_tail_result
 
 SAMPLE_RATE = 24_000
@@ -120,6 +119,16 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
         str(config.get("language", "en-gb")),
     )
     engine, lexicon = Kokoro(str(model), str(voices)), load_reviewed_lexicon(project)
+    context_preflight = pronunciation_context_preflight(
+        lexicon, lambda value: engine.tokenizer.phonemize(value, language)
+    )
+    write_json(
+        paths["production"] / "pronunciation-context-preflight.json",
+        context_preflight,
+    )
+    if not context_preflight["ok"]:
+        failed_terms = [row["published"] for row in context_preflight["terms"] if not row["ok"]]
+        raise ValueError(f"Reviewed pronunciation context preflight failed: {failed_terms}")
     engine_identity = {
         "model_sha256": sha256(model),
         "voices_sha256": sha256(voices),
@@ -245,27 +254,26 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
         "candidates": candidates,
     }
     write_json(paths["production"] / "candidates.json", report)
-    write_json(
-        paths["production"] / "candidate-strategy-ledger.json",
-        build_candidate_strategy_ledger(
-            candidate_plan,
-            candidates,
-            failures=sorted(failed),
-        ),
-    )
-    write_json(
-        paths["production"] / "generation.json",
-        {
-            "version": 2,
-            "audiobook_harness_version": __version__,
-            "takes": candidates,
-        },
-    )
+    return report
+
+
+def realize_generation_manifest(project: Path) -> dict[str, Any]:
+    """Commit the selected synthesis inventory as its own replayable phase."""
+    production = project_paths(project)["production"]
+    candidates = json.loads((production / "candidates.json").read_text(encoding="utf-8"))
+    report = {
+        "version": 3,
+        "audiobook_harness_version": __version__,
+        "candidate_manifest_sha256": sha256(production / "candidates.json"),
+        "takes": candidates.get("candidates", []),
+        "ok": bool(candidates.get("candidates")),
+    }
+    write_json(production / "generation.json", report)
     return report
 
 
 def _package(
-    project: Path, rows: list[dict[str, Any]], output: Path
+    project: Path, rows: list[dict[str, Any]], output: Path | None
 ) -> list[dict[str, Any]]:
     config = load_project(project)
     ordered_rows = _validated_ordered_takes(project, rows)
@@ -349,7 +357,9 @@ def _package(
             raise ValueError(
                 "project.yaml outputs must contain one or more of: flac, m4a, mp3"
             )
-        for suffix, codec, extra in (formats[str(value)] for value in requested):
+        for suffix, codec, extra in (
+            (formats[str(value)] for value in requested) if output is not None else ()
+        ):
             target = output / f"{chapter}_Audiobook{suffix}"
             target.parent.mkdir(parents=True, exist_ok=True)
             subprocess.run(
@@ -394,6 +404,97 @@ def _package(
             "ok": bool(assembly_chapters),
         },
     )
+    return outputs
+
+
+def prepare_release_contract(project: Path) -> dict[str, Any]:
+    paths = project_paths(project)
+    verification = json.loads((paths["production"] / "verification.json").read_text())
+    if not verification.get("ok"):
+        raise RuntimeError("Cannot prepare release: verification is not successful")
+    integrity = audit_candidate_selection(project, verification)
+    if not integrity["ok"]:
+        raise RuntimeError("Cannot prepare release: candidate selection integrity failed")
+    report = {
+        "version": 1,
+        "verification_sha256": sha256(paths["production"] / "verification.json"),
+        "candidate_selection_integrity_sha256": sha256(
+            paths["production"] / "candidate-selection-integrity.json"
+        ),
+        "selected_units": [row["id"] for row in verification.get("takes", [])],
+        "ok": True,
+    }
+    write_json(paths["production"] / "release-contract.json", report)
+    return report
+
+
+def assemble_selected(project: Path) -> dict[str, Any]:
+    paths = project_paths(project)
+    verification = json.loads((paths["production"] / "verification.json").read_text())
+    _package(project, list(verification["takes"]), None)
+    return json.loads((paths["production"] / "assembly-manifest.json").read_text())
+
+
+def post_mix_quality(project: Path) -> dict[str, Any]:
+    paths = project_paths(project)
+    verification = json.loads((paths["production"] / "verification.json").read_text())
+    ordered = _validated_ordered_takes(project, list(verification["takes"]))
+    analysis = json.loads((paths["production"] / "analysis.json").read_text())
+    assembly = json.loads((paths["production"] / "assembly-manifest.json").read_text())
+    fidelity = {
+        "version": 2,
+        "scope": "assembled_pcm",
+        "ordered_units": [row["id"] for row in ordered],
+        "expected_units": sum(len(chapter.get("units", [])) for chapter in analysis.get("chapters", [])),
+        "assembly_sha256": sha256(paths["production"] / "assembly-manifest.json"),
+    }
+    fidelity["ok"] = len(fidelity["ordered_units"]) == fidelity["expected_units"]
+    write_json(paths["production"] / "full-file-fidelity.json", fidelity)
+    ending_rows = [
+        {
+            "chapter": row["chapter"],
+            "last_unit": row["units"][-1]["unit"] if row.get("units") else None,
+            "trailing_hold_ms": row["units"][-1]["pause_after_ms"] if row.get("units") else 0,
+            "ok": bool(row.get("units")) and int(row["units"][-1]["pause_after_ms"]) >= 1500,
+        }
+        for row in assembly.get("chapters", [])
+    ]
+    write_json(
+        paths["production"] / "chapter-ending-audit.json",
+        {"version": 1, "chapters": ending_rows, "ok": bool(ending_rows) and all(row["ok"] for row in ending_rows)},
+    )
+    return fidelity
+
+
+def encode_assembled(project: Path, output: Path) -> list[dict[str, Any]]:
+    """Encode only already-verified PCM masters; never rebuild narration or joins."""
+    config = load_project(project)
+    assembly = json.loads(
+        (project / "production/assembly-manifest.json").read_text(encoding="utf-8")
+    )
+    formats = {
+        "flac": (".flac", "flac", []),
+        "m4a": (".m4a", "aac", ["-b:a", "256k"]),
+        "mp3": (".mp3", "libmp3lame", ["-b:a", "256k"]),
+    }
+    requested = config.get("outputs", ["m4a", "mp3"])
+    if not isinstance(requested, list) or not requested or any(value not in formats for value in requested):
+        raise ValueError("project.yaml outputs must contain one or more of: flac, m4a, mp3")
+    outputs = []
+    for chapter in assembly.get("chapters", []):
+        source = project / str(chapter["assembled_source"])
+        if not source.is_file() or sha256(source) != chapter.get("assembled_source_sha256"):
+            raise RuntimeError(f"Assembled PCM authority changed: {source}")
+        files = []
+        for suffix, codec, extra in (formats[str(value)] for value in requested):
+            target = output / f"{chapter['chapter']}_Audiobook{suffix}"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(source), "-c:a", codec, *extra, str(target)],
+                check=True,
+            )
+            files.append({"file": str(target.relative_to(output)), "sha256": sha256(target), "bytes": target.stat().st_size})
+        outputs.append({"chapter": chapter["chapter"], "files": files})
     return outputs
 
 
@@ -477,31 +578,29 @@ def _prepare_stage_directory(project: Path, output: Path | None) -> Path:
     return root
 
 
-def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
+def _stage_into(
+    project: Path,
+    output: Path | None = None,
+    *,
+    reuse_verified_phases: bool = False,
+) -> dict[str, Any]:
     paths = project_paths(project)
     verification = json.loads((paths["production"] / "verification.json").read_text())
-    if not verification.get("ok"):
-        raise RuntimeError("Cannot package: verification is not successful")
-    integrity = audit_candidate_selection(project, verification)
-    if not integrity["ok"]:
-        rules = ", ".join(str(row["rule"]) for row in integrity["errors"])
-        raise RuntimeError(
-            f"Cannot package: candidate selection integrity failed: {rules}"
-        )
-    write_json(
-        paths["production"] / "release-contract.json",
-        {
-            "version": 1,
-            "verification_sha256": sha256(paths["production"] / "verification.json"),
-            "candidate_selection_integrity_sha256": sha256(
-                paths["production"] / "candidate-selection-integrity.json"
-            ),
-            "selected_units": [row["id"] for row in verification.get("takes", [])],
-            "ok": True,
-        },
-    )
+    if not reuse_verified_phases:
+        prepare_release_contract(project)
+        assemble_selected(project)
+        post_mix_quality(project)
+    else:
+        for name in (
+            "release-contract.json",
+            "assembly-manifest.json",
+            "full-file-fidelity.json",
+            "chapter-ending-audit.json",
+        ):
+            if not (paths["production"] / name).is_file():
+                raise RuntimeError(f"Packaging cannot reuse missing phase artifact: {name}")
     root = _prepare_stage_directory(project, output)
-    outputs = _package(project, list(verification["takes"]), root)
+    outputs = encode_assembled(project, root)
     ordered_takes = _validated_ordered_takes(project, list(verification["takes"]))
     assembly = json.loads(
         (paths["production"] / "assembly-manifest.json").read_text(encoding="utf-8")
@@ -574,26 +673,9 @@ def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
         len(full_file_fidelity["ordered_units"]) == full_file_fidelity["expected_units"]
         and encoded_quality["ok"]
     )
-    write_json(paths["production"] / "full-file-fidelity.json", full_file_fidelity)
-    ending_rows = [
-        {
-            "chapter": row["chapter"],
-            "last_unit": row["units"][-1]["unit"] if row.get("units") else None,
-            "trailing_hold_ms": (
-                row["units"][-1]["pause_after_ms"] if row.get("units") else 0
-            ),
-            "ok": bool(row.get("units"))
-            and int(row["units"][-1]["pause_after_ms"]) >= 1500,
-        }
-        for row in assembly.get("chapters", [])
-    ]
     write_json(
-        paths["production"] / "chapter-ending-audit.json",
-        {
-            "version": 1,
-            "chapters": ending_rows,
-            "ok": bool(ending_rows) and all(row["ok"] for row in ending_rows),
-        },
+        paths["production"] / "encoded-full-file-fidelity.json",
+        full_file_fidelity,
     )
     regression_path = paths["production"] / "perceptual-regression.json"
     if not regression_path.is_file():
@@ -633,6 +715,47 @@ def stage(project: Path, output: Path | None = None) -> dict[str, Any]:
     write_json(paths["production"] / "stage-manifest.json", report)
     report["review"] = build_review(project, root)
     return report
+
+
+def stage(
+    project: Path,
+    output: Path | None = None,
+    *,
+    reuse_verified_phases: bool = False,
+) -> dict[str, Any]:
+    """Build a complete stage beside the target and replace it only on success."""
+    target = (output or project / "staging").resolve()
+    temporary = target.with_name(f".{target.name}.phase-8-{os.getpid()}")
+    if temporary.exists():
+        shutil.rmtree(temporary)
+    report = _stage_into(
+        project,
+        temporary,
+        reuse_verified_phases=reuse_verified_phases,
+    )
+    backup = target.with_name(f".{target.name}.previous-{os.getpid()}")
+    try:
+        if target.exists():
+            children = list(target.iterdir())
+            marker = target / STAGE_MARKER
+            if children:
+                try:
+                    ownership = json.loads(marker.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    raise RuntimeError(
+                        "Refusing to replace a non-empty directory not owned by Audiobook Harness"
+                    ) from None
+                if ownership.get("project") != str(project.resolve()):
+                    raise RuntimeError("Staging directory belongs to a different project")
+            target.replace(backup)
+        temporary.replace(target)
+        shutil.rmtree(backup, ignore_errors=True)
+        return report
+    except BaseException:
+        if not target.exists() and backup.exists():
+            backup.replace(target)
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
 
 
 def _probe_audio(path: Path) -> dict[str, Any]:

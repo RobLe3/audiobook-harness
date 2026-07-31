@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes Audiobook Harness **0.4.9**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.10**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 ## Performance and render lineage
 
-Version 0.4.9 treats the clean performed speech as the immutable take. Channel,
+Version 0.4.10 treats the clean performed speech as the immutable take. Channel,
 codec, mastering, and presentation renders are derived identities whose hashes
 name their parent take and processor contract. Listener decisions can therefore
 remain attached to unchanged performances while a derived render is rebuilt.
@@ -16,7 +16,9 @@ Quality gates use typed dispositions. Evidence and review blockers stop only
 their owning chapter, while independent chapters continue. Only an unsafe tool
 or infrastructure failure stops the complete series runner.
 
-A phase commits its receipt only after all declared outputs exist. A bounded
+A phase commits its receipt only after all declared outputs exist and every
+declared JSON success predicate is true. Each phase hashes only its authored
+inputs, predecessor receipts, and declared implementation modules. A bounded
 repair is represented by an input-bound ticket naming its owning phase,
 affected units, required input delta, and remaining attempt budget. Listener
 defect findings may survive a changed waveform, but approval never does.
@@ -48,14 +50,17 @@ after explicit setup.
 
 ## Unattended production
 
-`produce` is the single-process supervisor for a staged chapter set. It records
-five visible phases:
+`produce` is the single-process supervisor for a staged chapter set. It executes
+eight independently resumable transactions:
 
 1. manuscript and pronunciation analysis;
-2. bounded deterministic candidate generation;
-3. dual-ASR, acoustic and forced-alignment verification;
-4. one failed-unit candidate repair when evidence permits it; and
-5. hash-bound staging.
+2. bounded deterministic candidate synthesis;
+3. candidate realization;
+4. dual-ASR, acoustic and forced-alignment verification;
+5. the pre-mix release contract;
+6. PCM assembly;
+7. full-file and review preparation; and
+8. encoding and hash-bound staging.
 
 The repair phase regenerates only unit IDs rejected by the current verification
 report. It does not retry dictionary, corpus, missing-model, implementation or
@@ -77,7 +82,10 @@ or media changes. A hash-bound `phase-repair-receipt.json` may retain phases
 before one objectively repaired owning phase; that phase and every dependent
 phase still rerun.
 
-A receipt binds the production input identity and exact artifact hashes.
+A receipt binds the phase input identity, exact artifact hashes, and semantic
+success evidence. A failed phase removes its own and downstream receipts. An
+implementation failure restores the last committed owned artifacts; a quality
+rejection retains the failed evidence for diagnosis but never creates a receipt.
 Changed manuscript, configuration, lexicon, model lock, harness code, or
 artifact bytes invalidate the affected phase and its downstream evidence. An
 interruption never triggers a clean project restart. Candidate repair still

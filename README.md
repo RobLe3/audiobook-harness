@@ -1,6 +1,6 @@
 # Audiobook Harness
 
-Current release: **0.4.9**. Audiobook Harness uses one SemVer product identity;
+Current release: **0.4.10**. Audiobook Harness uses one SemVer product identity;
 project names and profile hashes do not create a second harness version. See
 [versioning and compatibility](docs/VERSIONING.md).
 
@@ -9,11 +9,17 @@ It focuses on manuscript analysis, pronunciation control, contextual dialogue,
 Kokoro TTS, dual-checkpoint local Whisper verification, forced alignment, and reproducible
 M4A/MP3 delivery with staged promotion.
 
-Version 0.4.9 makes phase completion transactional, binds gate results and
-repair tickets to one attempt and input identity, and separates source-bound
-listener findings from waveform-bound approval decisions. Missing outputs can
-no longer masquerade as speech rejection, and an unchanged failed input cannot
-consume another repair attempt.
+Version 0.4.10 executes all eight phases as receipt-last transactions. Each
+phase has its own dependency identity, success predicates, retry policy, and
+structured result. A small harness or review-server change therefore cannot
+invalidate unrelated audio work. Failed implementation attempts roll back
+partial owned outputs; quality failures retain their evidence without creating
+a success receipt.
+
+Pronunciation overrides are now located on phoneme-token boundaries and are
+preflighted in several sentence positions before synthesis. Contextual G2P
+variation can become a term-local diagnostic instead of an unstructured render
+crash, while the reviewed IPA remains the only pronunciation authority.
 
 Reviewed decoder-spelling equivalences are supported for protected names and
 phrases, but only as local transcript-comparison evidence. They never change the
@@ -114,7 +120,7 @@ container check; it never pulls an image or downloads a model.
 
 ## v0.4 review gate
 
-Version 0.4.9 writes source-preserving analysis contracts for structure, spoken
+Version 0.4.10 writes source-preserving analysis contracts for structure, spoken
 forms, dialogue, prosody and TTS risk. After staging, run
 `audiobook-harness review PROJECT`; the loopback service saves review drafts
 directly under `production/`. Finalize decisions in the panel or with
@@ -126,7 +132,7 @@ and the documented repetition or editorial-authority threshold. Existing
 projects can inspect an upgrade with `audiobook-harness upgrade-project
 PROJECT`; applying it requires the reported inventory hash.
 
-Version 0.4.9 also exposes the production contract directly:
+Version 0.4.10 also exposes the production contract directly:
 
 ```bash
 audiobook-harness pipeline-audit PROJECT

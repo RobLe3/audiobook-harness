@@ -9,7 +9,8 @@ from . import __version__
 from .feedback import compile_feedback, promote_rule
 from .measurements import build_quality_measurements
 from .parity import feature_parity
-from .pipeline import PHASES, audit_pipeline, resume_plan
+from .pipeline import PHASES, audit_pipeline, phase_input_identity, resume_plan
+from .phase_engine import PhaseExecutionError, execute_phase
 from .analysis import analyze
 from .project import scaffold
 from .performance import resolve_profile
@@ -21,8 +22,16 @@ from .resilience import (
     terminal_signatures,
 )
 from .status import render_status, watch, write_run_status
-from .tts import generate, promote, stage, stage_manifest_is_valid
-from .run_journal import invalidate_phase_receipts_from, write_phase_receipt
+from .tts import (
+    assemble_selected,
+    generate,
+    post_mix_quality,
+    prepare_release_contract,
+    promote,
+    realize_generation_manifest,
+    stage,
+    stage_manifest_is_valid,
+)
 from .review import finalize_review, serve_review
 from .migration import apply_upgrade, upgrade_plan
 from .versioning import compatibility_receipt
@@ -145,7 +154,7 @@ def produce(
         for phase in PHASES
     }
     plan = (
-        resume_plan(project, input_identity=input_identity)
+        resume_plan(project, input_identity=input_identity, repo=REPO)
         if resume
         else {
             "start_phase": 1,
@@ -193,42 +202,57 @@ def produce(
             error=None,
         )
 
+    def run_phase(number: int, action):
+        nonlocal phase_index
+        phase = PHASES[number - 1]
+        phase_index = number - 1
+        progress(phase_index, PRODUCTION_STEPS[phase_index])
+        identity = phase_input_identity(project, REPO, phase)
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                return execute_phase(
+                    project, phase=phase, input_identity=identity, action=action
+                )[0]
+            except PhaseExecutionError as error:
+                if not (
+                    error.result.status == "transient_failure"
+                    and attempt < phase.maximum_attempts
+                ):
+                    raise
+
     try:
         phase_index = 0
-        if first_step <= 1:
-            progress(0, PRODUCTION_STEPS[0])
-            analysis = analyze(project)
-            write_phase_receipt(
-                project,
-                step=1,
-                input_identity=input_identity,
-                artifacts=phase_artifacts[1],
-            )
-        else:
-            analysis = json.loads(phase_artifacts[1][0].read_text(encoding="utf-8"))
-        phase_index = 1
+        analysis = (
+            run_phase(1, lambda: analyze(project))
+            if first_step <= 1
+            else json.loads(phase_artifacts[1][0].read_text(encoding="utf-8"))
+        )
+        generation = (
+            run_phase(2, lambda: generate(project, REPO))
+            if first_step <= 2
+            else json.loads((production / "candidates.json").read_text(encoding="utf-8"))
+        )
         if first_step <= 3:
-            progress(1, PRODUCTION_STEPS[1])
-            generation = generate(project, REPO)
-            for step in (2, 3):
-                write_phase_receipt(
-                    project,
-                    step=step,
-                    input_identity=input_identity,
-                    artifacts=phase_artifacts[step],
-                )
-        else:
-            generation = json.loads(
-                (production / "candidates.json").read_text(encoding="utf-8")
-            )
-        phase_index = 3
+            run_phase(3, lambda: realize_generation_manifest(project))
         if first_step <= 4:
-            progress(3, PRODUCTION_STEPS[3])
-            verification = verify(
-                project,
-                REPO,
-                performance_profile=performance_profile,
-            )
+            try:
+                verification = run_phase(
+                    4,
+                    lambda: verify(
+                        project, REPO, performance_profile=performance_profile
+                    ),
+                )
+            except PhaseExecutionError as error:
+                if (
+                    error.result.status != "repairable_failure"
+                    or "verification.json" not in error.result.evidence
+                ):
+                    raise
+                verification = json.loads(
+                    (production / "verification.json").read_text(encoding="utf-8")
+                )
         else:
             verification = json.loads(
                 (production / "verification.json").read_text(encoding="utf-8")
@@ -245,13 +269,26 @@ def produce(
             )
             if decision.get("retry") is True:
                 retries += 1
-                generate(project, REPO, failed_only=True)
-                progress(3, f"{PRODUCTION_STEPS[3]} after bounded repair")
-                verification = verify(
-                    project,
-                    REPO,
-                    performance_profile=performance_profile,
+                generation = run_phase(
+                    2, lambda: generate(project, REPO, failed_only=True)
                 )
+                run_phase(3, lambda: realize_generation_manifest(project))
+                try:
+                    verification = run_phase(
+                        4,
+                        lambda: verify(
+                            project, REPO, performance_profile=performance_profile
+                        ),
+                    )
+                except PhaseExecutionError as error:
+                    if (
+                        error.result.status != "repairable_failure"
+                        or "verification.json" not in error.result.evidence
+                    ):
+                        raise
+                    verification = json.loads(
+                        (production / "verification.json").read_text(encoding="utf-8")
+                    )
                 failures = [str(item) for item in verification.get("failures", [])]
             if not verification.get("ok"):
                 terminal = decide_candidate_retry(
@@ -272,35 +309,21 @@ def produce(
                     "Verification remains blocked; inspect production/verification.json. "
                     f"Automatic recovery stopped: {terminal['reason']}."
                 )
-        if first_step <= 4:
-            # A bounded repair rewrites both candidates and verification.
-            # Refresh their owning receipts so a later resume sees the final
-            # verified bytes rather than the pre-repair rejection.
-            completed_steps = (2, 3, 4) if retries or first_step <= 3 else (4,)
-            for step in completed_steps:
-                write_phase_receipt(
-                    project,
-                    step=step,
-                    input_identity=input_identity,
-                    artifacts=phase_artifacts[step],
-                )
-        phase_index = 5
-        if first_step <= 8:
-            progress(phase_index, PRODUCTION_STEPS[phase_index])
-            staged = stage(project, output)
-            for step in (5, 6, 7, 8):
-                write_phase_receipt(
-                    project,
-                    step=step,
-                    input_identity=input_identity,
-                    artifacts=phase_artifacts[step],
-                )
-        else:
-            staged = json.loads(
-                (production / "stage-manifest.json").read_text(encoding="utf-8")
+        if first_step <= 5:
+            run_phase(5, lambda: prepare_release_contract(project))
+        if first_step <= 6:
+            run_phase(6, lambda: assemble_selected(project))
+        if first_step <= 7:
+            run_phase(7, lambda: post_mix_quality(project))
+        staged = (
+            run_phase(
+                8,
+                lambda: stage(project, output, reuse_verified_phases=True),
             )
+            if first_step <= 8
+            else json.loads((production / "stage-manifest.json").read_text(encoding="utf-8"))
+        )
     except BaseException as error:
-        invalidate_phase_receipts_from(project, step=phase_index + 1)
         write_run_status(
             project,
             state="failed",
@@ -309,7 +332,11 @@ def produce(
             input_identity=input_identity,
             candidate_retries=retries,
             maximum_candidate_retries=maximum_candidate_retries,
-            error={"type": type(error).__name__, "message": str(error)},
+            error=(
+                {"type": type(error).__name__, **error.result.__dict__}
+                if isinstance(error, PhaseExecutionError)
+                else {"type": type(error).__name__, "message": str(error)}
+            ),
         )
         raise
     write_run_status(

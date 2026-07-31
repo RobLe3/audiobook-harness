@@ -381,6 +381,16 @@ def review_status(project: Path) -> dict[str, Any]:
     manifest = read("review-manifest.json")
     decisions = read("review-decisions.json")
     draft = read("review-draft.json")
+    phase_result = read("phase-result.json")
+    journal = production / "phase-events.jsonl"
+    try:
+        latest_event = json.loads(
+            next(line for line in reversed(journal.read_text(encoding="utf-8").splitlines()) if line.strip())
+        )
+    except (OSError, StopIteration, json.JSONDecodeError):
+        latest_event = {}
+    if isinstance(latest_event, dict) and isinstance(latest_event.get("result"), dict):
+        phase_result = latest_event["result"]
     owner, _detail = owner_activity(run)
     current = manifest.get("review_identity_sha256")
     authoritative = decisions.get("review_identity_sha256")
@@ -390,7 +400,13 @@ def review_status(project: Path) -> dict[str, Any]:
         action = "wait_for_generation"
         enabled = False
     elif state == "failed":
-        action = "generation_blocked"
+        result_status = str(phase_result.get("status", "unknown"))
+        action = {
+            "transient_failure": "retry_scheduled",
+            "repairable_failure": "targeted_repair_pending",
+            "review_required": "focused_review_required",
+            "implementation_failure": "harness_correction_required",
+        }.get(result_status, "diagnostic_unavailable")
         enabled = False
     elif not current:
         action = "await_review_media"
@@ -421,6 +437,15 @@ def review_status(project: Path) -> dict[str, Any]:
         "draft_matches_current_identity": bool(current and draft_identity == current),
         "review_available": bool(current),
         "reviewer_action": {"code": action, "enabled": enabled},
+        "phase_result": phase_result
+        if phase_result
+        else {
+            "status": "unknown",
+            "detail": "No structured phase result is available.",
+        },
+        "state_authority": "append_only_phase_journal"
+        if latest_event
+        else "run_status_fallback",
         "asr": asr_activity(project, worker_active=owner == "active"),
         "review_only": True,
     }

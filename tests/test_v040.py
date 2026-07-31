@@ -59,7 +59,32 @@ def test_review_status_disables_review_when_generation_failed(tmp_path: Path):
         json.dumps({"state": "failed", "phase": "cue_qa"})
     )
     status = review_status(tmp_path)
-    assert status["reviewer_action"]["code"] == "generation_blocked"
+    assert status["reviewer_action"]["code"] == "diagnostic_unavailable"
+
+
+def test_review_status_uses_structured_phase_failure(tmp_path: Path):
+    production = tmp_path / "production"
+    production.mkdir()
+    (production / "run-status.json").write_text(
+        json.dumps({"state": "failed", "phase": "synthesis"})
+    )
+    (production / "phase-events.jsonl").write_text(
+        json.dumps(
+            {
+                "event": "phase_failed",
+                "result": {
+                    "status": "implementation_failure",
+                    "owner_phase": 2,
+                    "failure_code": "unhandled_tool_failure",
+                },
+            }
+        )
+        + "\n"
+    )
+    status = review_status(tmp_path)
+    assert status["reviewer_action"]["code"] == "harness_correction_required"
+    assert status["phase_result"]["owner_phase"] == 2
+    assert status["state_authority"] == "append_only_phase_journal"
     assert not status["reviewer_action"]["enabled"]
 
 

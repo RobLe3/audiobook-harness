@@ -55,6 +55,7 @@ def write_phase_receipt(
     step: int,
     input_identity: str,
     artifacts: list[Path],
+    success_predicates: tuple[tuple[str, str], ...] = (),
 ) -> dict[str, Any]:
     """Checkpoint one completed production phase and its exact output bytes."""
 
@@ -63,6 +64,16 @@ def write_phase_receipt(
         raise FileNotFoundError(
             f"phase {step} is missing checkpoint artifacts: {missing}"
         )
+    predicate_evidence = []
+    for relative, field in success_predicates:
+        path = project / "production" / relative
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError(f"phase {step} predicate artifact is unavailable: {relative}") from error
+        if not isinstance(value, dict) or value.get(field) is not True:
+            raise ValueError(f"phase {step} predicate failed: {relative}.{field}")
+        predicate_evidence.append({"path": f"production/{relative}", "field": field, "value": True})
     receipt = {
         "version": 1,
         "step": step,
@@ -75,6 +86,7 @@ def write_phase_receipt(
             }
             for path in artifacts
         ],
+        "success_predicates": predicate_evidence,
     }
     write_json(phase_receipt_path(project, step), receipt)
     return receipt
@@ -103,6 +115,15 @@ def phase_receipt_is_valid(project: Path, *, step: int, input_identity: str) -> 
             or path.stat().st_size != row.get("bytes")
             or sha256(path) != row.get("sha256")
         ):
+            return False
+    for predicate in receipt.get("success_predicates", []):
+        if not isinstance(predicate, dict):
+            return False
+        try:
+            value = json.loads((project / str(predicate.get("path", ""))).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        if not isinstance(value, dict) or value.get(str(predicate.get("field", ""))) is not True:
             return False
     return True
 

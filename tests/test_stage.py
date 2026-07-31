@@ -11,8 +11,7 @@ import soundfile as sf
 from audiobook_harness import cli
 from audiobook_harness.project import scaffold, sha256
 from audiobook_harness.review import build_review, finalize_review
-from audiobook_harness.resilience import production_input_identity
-from audiobook_harness.run_journal import write_phase_receipt
+from audiobook_harness.run_journal import phase_receipt_is_valid, write_phase_receipt
 from audiobook_harness.status import render_status, write_run_status
 from audiobook_harness import tts
 from audiobook_harness.tts import (
@@ -155,7 +154,7 @@ def _verified_stage(
     (project / "production/stage-manifest.json").write_text(json.dumps(manifest))
     review = build_review(project, stage)
     assert review["version"] == 3
-    assert review["audiobook_harness_version"] == "0.4.9"
+    assert review["audiobook_harness_version"] == "0.4.10"
     finalize_review(
         project, [{"id": row["id"], "decision": "approve"} for row in review["items"]]
     )
@@ -293,8 +292,11 @@ def test_produce_repairs_failed_units_once_then_stages(
     def fake_generate(value: Path, repo: Path, *, failed_only: bool = False):
         calls.append(("generate", failed_only))
         (value / "production/candidates.json").write_text('{"candidates":[]}')
-        (value / "production/generation.json").write_text('{"takes":[]}')
+        (value / "production/generation.json").write_text('{"takes":[],"ok":true}')
         (value / "production/candidate-plan.json").write_text('{"ok":true}')
+        (value / "production/pronunciation-context-preflight.json").write_text(
+            '{"ok":true}'
+        )
         return {"ok": True}
 
     monkeypatch.setattr(cli, "generate", fake_generate)
@@ -310,15 +312,32 @@ def test_produce_repairs_failed_units_once_then_stages(
             '{"version":1,"units":[]}'
         )
         (value / "production/quality-measurements.json").write_text('{"ok":true}')
+        for name in cli.PHASES[3].required_artifacts:
+            path = value / "production" / name
+            if not path.exists():
+                path.write_text('{"ok":true}')
         return result
 
     monkeypatch.setattr(cli, "verify", fake_verify)
 
-    def fake_stage(value: Path, output: Path | None):
+    monkeypatch.setattr(
+        cli,
+        "realize_generation_manifest",
+        lambda value: json.loads((value / "production/generation.json").read_text()),
+    )
+
+    def fake_phase(value: Path, phase: int):
+        for name in cli.PHASES[phase - 1].required_artifacts:
+            (value / "production" / name).write_text('{"ok":true}')
+        return {"ok": True}
+
+    monkeypatch.setattr(cli, "prepare_release_contract", lambda value: fake_phase(value, 5))
+    monkeypatch.setattr(cli, "assemble_selected", lambda value: fake_phase(value, 6))
+    monkeypatch.setattr(cli, "post_mix_quality", lambda value: fake_phase(value, 7))
+
+    def fake_stage(value: Path, output: Path | None, *, reuse_verified_phases: bool = False):
         result = {"state": "staged"}
-        for phase in cli.PHASES[4:]:
-            for name in phase.required_artifacts:
-                (value / "production" / name).write_text('{"ok":true}')
+        fake_phase(value, 8)
         (value / "production/stage-manifest.json").write_text(json.dumps(result))
         return result
 
@@ -332,6 +351,12 @@ def test_produce_repairs_failed_units_once_then_stages(
     assert result["ok"]
     assert result["candidate_retries"] == 1
     assert calls == [("generate", False), ("generate", True)]
+    for phase in cli.PHASES:
+        assert phase_receipt_is_valid(
+            project,
+            step=phase.number,
+            input_identity=cli.phase_input_identity(project, cli.REPO, phase),
+        )
     status = json.loads((project / "production/run-status.json").read_text())
     assert status["state"] == "complete"
     assert all(row["state"] == "complete" for row in status["steps"])
@@ -344,8 +369,15 @@ def test_produce_resume_dry_run_starts_at_first_missing_phase(tmp_path: Path):
     analysis = project / "production/analysis.json"
     analysis.parent.mkdir(parents=True, exist_ok=True)
     analysis.write_text('{"ok":true}', encoding="utf-8")
-    identity = production_input_identity(project, cli.REPO)
-    write_phase_receipt(project, step=1, input_identity=identity, artifacts=[analysis])
+    identity = cli.phase_input_identity(project, cli.REPO, cli.PHASES[0])
+    for name in cli.PHASES[0].required_artifacts:
+        (project / "production" / name).write_text('{"ok":true}')
+    write_phase_receipt(
+        project,
+        step=1,
+        input_identity=identity,
+        artifacts=[project / "production" / name for name in cli.PHASES[0].required_artifacts],
+    )
 
     result = cli.produce(
         project,
@@ -358,3 +390,29 @@ def test_produce_resume_dry_run_starts_at_first_missing_phase(tmp_path: Path):
 
     assert result["phases"][0]["action"] == "REUSE"
     assert all(row["action"] == "RUN" for row in result["phases"][1:])
+
+
+def test_failed_phase8_build_preserves_previous_stage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from audiobook_harness import tts
+
+    project = tmp_path / "book"
+    project.mkdir()
+    target = project / "staging"
+    target.mkdir()
+    (target / tts.STAGE_MARKER).write_text(
+        json.dumps({"project": str(project.resolve())})
+    )
+    (target / "approved.m4a").write_bytes(b"approved")
+
+    def fail_into(value: Path, output: Path, *, reuse_verified_phases: bool):
+        output.mkdir(parents=True)
+        (output / "partial.m4a").write_bytes(b"partial")
+        raise RuntimeError("encoder failed")
+
+    monkeypatch.setattr(tts, "_stage_into", fail_into)
+    with pytest.raises(RuntimeError, match="encoder failed"):
+        tts.stage(project, target, reuse_verified_phases=True)
+    assert (target / "approved.m4a").read_bytes() == b"approved"
+    assert not (target / "partial.m4a").exists()

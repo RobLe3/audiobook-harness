@@ -230,6 +230,35 @@ def test_initialism_override_locates_context_reduced_final_a():
     assert evidence[0]["default_phonemes"] == "sˈiː aɪ ɐ"
 
 
+def test_pronunciation_locator_does_not_replace_inside_another_token():
+    from audiobook_harness.pronunciation import apply_to_phonemes_with_evidence
+
+    resolved, _ = apply_to_phonemes_with_evidence(
+        "Ann.",
+        "joanne an.",
+        {"Ann": {"review_status": "reviewed", "phoneme_override": "reviewed"}},
+        lambda _value: "an",
+    )
+    assert resolved == "joanne reviewed."
+
+
+def test_pronunciation_context_preflight_reports_each_reviewed_term():
+    from audiobook_harness.pronunciation import pronunciation_context_preflight
+
+    report = pronunciation_context_preflight(
+        {
+            "CIA": {
+                "review_status": "reviewed",
+                "category": "initialism",
+                "phoneme_override": "sˈiː ˈaɪ ˈeɪ",
+            }
+        },
+        lambda text: "sˈiː aɪ ɐ" if "CIA" in text else text,
+    )
+    assert report["ok"]
+    assert report["terms"][0]["contexts"] == 3
+
+
 def test_analysis_assigns_contiguous_immutable_unit_order(tmp_path: Path):
     template = Path(__file__).parents[1] / "templates/project"
     project = tmp_path / "book"

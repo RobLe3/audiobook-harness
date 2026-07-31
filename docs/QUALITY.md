@@ -1,6 +1,20 @@
 # Quality contract
 
-This document describes Audiobook Harness **0.4.9**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.10**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+
+## Transactional quality authority
+
+Each production phase owns an explicit set of artifacts and JSON success
+predicates. The harness writes the phase receipt only after every artifact is
+present, every predicate is true, and the phase-specific input identity is
+known. A rejected quality report remains available for diagnosis but is never
+reusable as a successful phase. Implementation failures restore the preceding
+committed artifacts and invalidate only the failed phase and its dependants.
+
+Reviewed pronunciations are resolved occurrence by occurrence on phoneme-token
+boundaries. Before synthesis, the harness tests each reviewed term in isolated
+and sentence-context carriers. Contextual G2P variants may locate the generated
+span; only the reviewed IPA may replace it.
 
 Review authority is item-scoped. Rebuilding a review page does not invalidate
 an unchanged decision: the item identity binds its text, source audio,

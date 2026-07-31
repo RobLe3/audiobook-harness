@@ -203,7 +203,7 @@ def apply_to_phonemes_with_evidence(
     ):
         if row.get("review_status") != "reviewed" or not row.get("phoneme_override"):
             continue
-        surfaces = [published, *row.get("aliases", [])]
+        surfaces = [published, str(row.get("spoken", "")), *row.get("aliases", [])]
         for surface in surfaces:
             if not isinstance(surface, str) or not surface:
                 continue
@@ -233,18 +233,15 @@ def apply_to_phonemes_with_evidence(
         ):
             prefix = default[: -len("ˈeɪ")]
             patterns.extend(f"{prefix}{vowel}" for vowel in ("ɐ", "ə", "ᵊ"))
-        matched_default = next(
-            (pattern for pattern in dict.fromkeys(patterns) if pattern in resolved),
-            None,
-        )
-        if matched_default is None:
+        matched = _find_phoneme_token_span(resolved, tuple(dict.fromkeys(patterns)))
+        if matched is None:
             raise ValueError(
                 f"Cannot apply lexicon phonemes for occurrence {published} at {start}:{end}"
             )
+        phoneme_start, phoneme_end, matched_default = matched
         override = str(row["phoneme_override"])
         before = resolved
-        phoneme_start = before.find(matched_default)
-        resolved = before.replace(matched_default, override, 1)
+        resolved = before[:phoneme_start] + override + before[phoneme_end:]
         evidence.append(
             {
                 "published": published,
@@ -256,3 +253,51 @@ def apply_to_phonemes_with_evidence(
             }
         )
     return resolved, evidence
+
+
+def _phoneme_tokens(value: str) -> list[tuple[str, int, int]]:
+    return [
+        (match.group(0), match.start(), match.end())
+        for match in re.finditer(r"[^\s.,;:!?]+", value)
+    ]
+
+
+def _find_phoneme_token_span(
+    phonemes: str, patterns: tuple[str, ...]
+) -> tuple[int, int, str] | None:
+    """Locate a reviewed occurrence on token boundaries, never as a substring."""
+    actual = _phoneme_tokens(phonemes)
+    actual_values = [token for token, _, _ in actual]
+    for pattern in patterns:
+        expected = [token for token, _, _ in _phoneme_tokens(pattern)]
+        if not expected:
+            continue
+        for index in range(len(actual_values) - len(expected) + 1):
+            if actual_values[index : index + len(expected)] == expected:
+                start = actual[index][1]
+                end = actual[index + len(expected) - 1][2]
+                return start, end, phonemes[start:end]
+    return None
+
+
+def pronunciation_context_preflight(
+    lexicon: dict[str, dict[str, Any]], phonemize: Any
+) -> dict[str, Any]:
+    """Exercise reviewed terms in common carrier positions before synthesis."""
+    carriers = ("{term}.", "Before {term} arrived.", "We discussed {term} carefully.")
+    rows = []
+    for published, entry in lexicon.items():
+        if entry.get("review_status") != "reviewed" or not entry.get("phoneme_override"):
+            continue
+        failures = []
+        for template in carriers:
+            text = template.format(term=published)
+            generated = str(phonemize(text))
+            try:
+                apply_to_phonemes_with_evidence(
+                    text, generated, {published: entry}, phonemize
+                )
+            except ValueError as error:
+                failures.append({"text": text, "generated_phonemes": generated, "error": str(error)})
+        rows.append({"published": published, "contexts": len(carriers), "failures": failures, "ok": not failures})
+    return {"version": 1, "terms": rows, "ok": all(row["ok"] for row in rows)}
