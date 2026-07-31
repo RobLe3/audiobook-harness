@@ -23,9 +23,76 @@ def _canonical(value: object) -> str:
     ).hexdigest()
 
 
+def review_item_identity(item: dict[str, Any]) -> str:
+    """Bind a decision to one review item, not to the surrounding page."""
+
+    return _canonical(
+        {
+            key: item.get(key)
+            for key in (
+                "id",
+                "kind",
+                "audio_sha256",
+                "files",
+                "file_evidence",
+                "published_text",
+                "spoken_text",
+                "source_audio",
+                "mastered_context",
+            )
+        }
+    )
+
+
+def carry_forward_decisions(
+    old_manifest: dict[str, Any],
+    old_decisions: dict[str, Any],
+    new_manifest: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Reuse only decisions whose exact item-level review identity survived."""
+
+    old_items = {
+        str(row.get("id")): row
+        for row in old_manifest.get("items", [])
+        if isinstance(row, dict) and row.get("id")
+    }
+    new_items = {
+        str(row.get("id")): row
+        for row in new_manifest.get("items", [])
+        if isinstance(row, dict) and row.get("id")
+    }
+    carried = []
+    for decision in old_decisions.get("decisions", []):
+        if not isinstance(decision, dict):
+            continue
+        item_id = str(decision.get("id", ""))
+        old_item, new_item = old_items.get(item_id), new_items.get(item_id)
+        if not old_item or not new_item:
+            continue
+        old_identity = old_item.get(
+            "review_item_identity_sha256"
+        ) or review_item_identity(old_item)
+        if old_identity != new_item.get("review_item_identity_sha256"):
+            continue
+        carried.append({**decision, "review_item_identity_sha256": old_identity})
+    return carried
+
+
 def build_review(project: Path, stage: Path | None = None) -> dict[str, Any]:
     root = (stage or project / "staging").resolve()
     production = project / "production"
+    old_manifest_path = production / "review-manifest.json"
+    old_decisions_path = production / "review-decisions.json"
+    old_manifest = (
+        json.loads(old_manifest_path.read_text(encoding="utf-8"))
+        if old_manifest_path.is_file()
+        else {}
+    )
+    old_decisions = (
+        json.loads(old_decisions_path.read_text(encoding="utf-8"))
+        if old_decisions_path.is_file()
+        else {}
+    )
     staged = json.loads((root / "stage-manifest.json").read_text())
     risk_path = production / "tts-risk-map.json"
     risks = (
@@ -80,6 +147,7 @@ def build_review(project: Path, stage: Path | None = None) -> dict[str, Any]:
             "id": f"chapter:{row['chapter']}",
             "kind": "assembled_chapter",
             "files": [f["file"] for f in row["files"]],
+            "file_evidence": row["files"],
             "mandatory": True,
         }
         for row in staged["outputs"]
@@ -136,6 +204,8 @@ def build_review(project: Path, stage: Path | None = None) -> dict[str, Any]:
                     },
                 }
             )
+    for item in items:
+        item["review_item_identity_sha256"] = review_item_identity(item)
     manifest: dict[str, Any] = {
         "version": 3,
         "audiobook_harness_version": __version__,
@@ -157,6 +227,17 @@ def build_review(project: Path, stage: Path | None = None) -> dict[str, Any]:
     }
     manifest["review_identity_sha256"] = _canonical(manifest)
     write_json(production / "review-manifest.json", manifest)
+    carried = carry_forward_decisions(old_manifest, old_decisions, manifest)
+    if carried:
+        write_json(
+            production / "review-draft.json",
+            {
+                "version": 3,
+                "review_identity_sha256": manifest["review_identity_sha256"],
+                "decisions": carried,
+                "carried_forward": True,
+            },
+        )
     return manifest
 
 

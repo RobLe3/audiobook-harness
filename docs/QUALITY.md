@@ -1,6 +1,11 @@
 # Quality contract
 
-This document describes Audiobook Harness **0.4.7**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.8**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+
+Review authority is item-scoped. Rebuilding a review page does not invalidate
+an unchanged decision: the item identity binds its text, source audio,
+comparison audio, mastered context, and decision scope. Any changed component
+creates a new item identity and requires a new decision.
 
 The local production contract is: analyse, review pronunciation-sensitive terms,
 generate bounded deterministic candidates, verify every candidate, stage a

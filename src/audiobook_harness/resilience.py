@@ -7,9 +7,49 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from dataclasses import asdict, dataclass
+from enum import StrEnum
 from typing import Any
 
 from .project import sha256
+
+
+class GateDisposition(StrEnum):
+    PASS = "pass"
+    RETRY_TRANSIENT = "retry_transient"
+    REPAIR_ARTIFACT = "repair_artifact"
+    REVIEW_REQUIRED = "review_required"
+    BLOCKED_EVIDENCE = "blocked_evidence"
+    FATAL_TOOL_FAILURE = "fatal_tool_failure"
+    BLOCKED_UNKNOWN = "blocked_unknown"
+
+
+@dataclass(frozen=True)
+class GateResult:
+    gate: str
+    disposition: GateDisposition
+    owner_phase: int
+    evidence_fingerprint: str
+    affected_units: tuple[str, ...] = ()
+    invalidated_artifacts: tuple[str, ...] = ()
+    next_action: str = "none"
+    remaining_attempts: int = 0
+    detail: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @property
+    def blocks_series(self) -> bool:
+        return self.disposition == GateDisposition.FATAL_TOOL_FAILURE
+
+    @property
+    def blocks_chapter(self) -> bool:
+        return self.disposition not in {
+            GateDisposition.PASS,
+            GateDisposition.RETRY_TRANSIENT,
+            GateDisposition.REPAIR_ARTIFACT,
+        }
 
 
 def production_input_identity(project: Path, repo: Path) -> str:
