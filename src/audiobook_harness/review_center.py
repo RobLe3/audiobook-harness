@@ -271,6 +271,51 @@ def serve_review_center(
                 return
             self.send_error(404)
 
+        def do_HEAD(self) -> None:
+            """Mirror GET route availability without sending response bodies."""
+            parts = self.route_parts()
+            if parts == ["review-center"]:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                return
+            if len(parts) < 2 or parts[0] != "review-center":
+                self.send_error(404)
+                return
+            try:
+                project = self.project(unquote(parts[1]))
+            except FileNotFoundError:
+                self.send_error(404)
+                return
+            if len(parts) == 2:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                return
+            if parts[2:] in (
+                ["api", "status"],
+                ["api", "review-manifest"],
+                ["api", "review-draft"],
+            ):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                return
+            if len(parts) >= 4 and parts[2] == "media":
+                relative = Path(*[unquote(value) for value in parts[3:]])
+                target = (project.root / "staging" / relative).resolve()
+                root = (project.root / "staging").resolve()
+                if target.is_relative_to(root) and target.is_file():
+                    self.send_response(200)
+                    self.send_header(
+                        "Content-Type",
+                        guess_type(target.name)[0] or "application/octet-stream",
+                    )
+                    self.send_header("Content-Length", str(target.stat().st_size))
+                    self.end_headers()
+                    return
+            self.send_error(404)
+
         def authorized(self, project: ReviewProject) -> bool:
             return secrets.compare_digest(
                 self.headers.get("X-Audiobook-Review-Token", ""),
