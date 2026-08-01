@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0
+
+- Add a project-agnostic local Review Center with multi-project discovery,
+  project-scoped status/media/review routes, and a loopback-only lifecycle
+  controller (`start`, `stop`, `restart`, `status`).
+- Preserve the existing single-project `review PROJECT` command and hash-bound
+  review finalization contract.
+- Document the Review Center workflow and add local animated/interactive
+  walkthroughs without introducing hosted services or GitHub workflows.
+
 ## 0.4.7
 
 - Treat the PCM assembly tail as authoritative while allowing at most one

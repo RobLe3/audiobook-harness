@@ -34,6 +34,7 @@ from .tts import (
     stage_manifest_is_valid,
 )
 from .review import finalize_review, serve_review
+from .review_center import control, serve_review_center
 from .migration import apply_upgrade, upgrade_plan
 from .versioning import compatibility_receipt
 
@@ -391,6 +392,14 @@ def main() -> None:
     compatibility.add_argument("--apply", action="store_true")
     new = sub.add_parser("new-project")
     new.add_argument("directory", type=Path)
+    review_center = sub.add_parser("review-center")
+    review_center.add_argument(
+        "action", choices=("start", "stop", "restart", "status", "serve")
+    )
+    review_center.add_argument("--workspace-root", type=Path, default=Path.cwd())
+    review_center.add_argument("--config", type=Path)
+    review_center.add_argument("--host", default="127.0.0.1")
+    review_center.add_argument("--port", type=int, default=8765)
     for name in (
         "analyze",
         "generate",
@@ -467,6 +476,13 @@ def main() -> None:
     if args.command == "new-project":
         scaffold(args.directory.resolve(), REPO / "templates/project")
         emit({"ok": True, "project": str(args.directory.resolve())})
+        return
+    if args.command == "review-center":
+        workspace = args.workspace_root.resolve()
+        if args.action == "serve":
+            serve_review_center(workspace, args.host, args.port, args.config)
+        else:
+            emit(control(args.action, workspace, args.host, args.port, args.config))
         return
     project = args.project.resolve()
     if args.command == "release":

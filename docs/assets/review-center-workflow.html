@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Audiobook Harness Review Center workflow</title>
+<style>
+:root{color-scheme:dark}body{font:18px/1.5 system-ui,sans-serif;max-width:880px;margin:2rem auto;padding:1rem;background:#0d1117;color:#edf3f8}h1{font-size:clamp(1.8rem,4vw,3rem)}.stage{min-height:18rem;display:grid;place-items:center;background:#17202b;border:1px solid #38506a;border-radius:18px;padding:2rem;text-align:center;animation:fade 18s infinite}.stage h2{font-size:2rem;color:#8fd3ff}.stage p{max-width:45rem}.stage .step{font-variant-numeric:tabular-nums;color:#9eacba}@keyframes fade{0%,7%{opacity:1}12%,88%{opacity:.25}93%,100%{opacity:1}}.hint{color:#9eacba}.controls{display:flex;gap:.5rem;margin:.75rem 0}button{font:inherit;padding:.5rem .8rem;border:1px solid #38506a;border-radius:8px;background:#17202b;color:#edf3f8;cursor:pointer}</style>
+<h1>Review Center workflow</h1>
+<p class="hint">A local, review-only view over hash-bound audiobook evidence.</p>
+<div class="stage"><div><div class="step" id="step"></div><h2 id="title"></h2><p id="detail"></p></div></div>
+<div class="controls"><button id="prev">Previous</button><button id="next">Next</button></div>
+<p class="hint">The animation is deterministic and uses no network assets. Finalization remains an explicit listener decision.</p>
+<script>
+const steps=[['01','Prepare','Run the staged production workflow and keep each receipt tied to its inputs.'],['02','Choose a project','Review Center lists every configured Audiobook Harness project.'],['03','Listen','Compare the staged chapter, context, and high-risk items.'],['04','Save locally','Draft decisions are stored under the project and remain identity-bound.'],['05','Finalize','Only the current review identity can become listener authority.'],['06','Repair','Rejected or uncertain findings become bounded correction work.'],['07','Promote','Promotion remains a separate deliberate release action.']];let i=0;function show(){step.textContent=`${steps[i][0]} / ${steps.length}`;title.textContent=steps[i][1];detail.textContent=steps[i][2]}prev.onclick=()=>{i=(i+steps.length-1)%steps.length;show()};next.onclick=()=>{i=(i+1)%steps.length;show()};show();setInterval(()=>{i=(i+1)%steps.length;show()},2600);
+</script>

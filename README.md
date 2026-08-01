@@ -1,6 +1,6 @@
 # Audiobook Harness
 
-Current release: **0.4.15**. Audiobook Harness uses one SemVer product identity;
+Current release: **0.5.0**. Audiobook Harness uses one SemVer product identity;
 project names and profile hashes do not create a second harness version. See
 [versioning and compatibility](docs/VERSIONING.md).
 
@@ -13,7 +13,7 @@ It focuses on manuscript analysis, pronunciation control, contextual dialogue,
 Kokoro TTS, dual-checkpoint local Whisper verification, forced alignment, and reproducible
 M4A/MP3 delivery with staged promotion.
 
-Version 0.4.15 executes all eight phases as receipt-last transactions. Each
+Version 0.5.0 executes all eight phases as receipt-last transactions. Each
 phase has its own dependency identity, success predicates, retry policy, and
 structured result. A small harness or review-server change therefore cannot
 invalidate unrelated audio work. Failed implementation attempts roll back
@@ -153,9 +153,63 @@ It runs the unit tests and linting with the local virtual environment. If the
 already-built local smoke image is present, it also runs its model-free offline
 container check; it never pulls an image or downloads a model.
 
-## v0.4 review gate
+## Review Center
 
-Version 0.4.15 writes source-preserving analysis contracts for structure, spoken
+Audiobook Harness keeps the existing single-project review command and adds a
+local multi-project Review Center. The Review Center is review-only: it never
+publishes audio and never turns a draft into authority without an explicit
+finalization.
+
+Create a workspace configuration such as `review-center.json`:
+
+```json
+{
+  "version": 1,
+  "default_project": "my-book",
+  "projects": [
+    {"id": "my-book", "path": "projects/my-book", "display_name": "My Book"}
+  ]
+}
+```
+
+Start and monitor the single loopback server:
+
+```bash
+scripts/review-center start --workspace-root . --config review-center.json
+scripts/review-center status --workspace-root . --config review-center.json
+# open http://127.0.0.1:8765/review-center/
+scripts/review-center stop --workspace-root . --config review-center.json
+```
+
+The same workflow is available cross-platform through the CLI:
+
+```bash
+audiobook-harness review-center start --workspace-root . --config review-center.json
+audiobook-harness review-center restart --workspace-root . --config review-center.json
+```
+
+The chooser opens `/review-center/<project-id>/`. Each project has isolated
+media, draft, status, and finalize routes. The server is loopback-only and
+stores its PID and log in the platform temporary directory. Existing
+`audiobook-harness review PROJECT` usage remains supported.
+
+Recommended production workflow:
+
+```text
+produce → inspect staged evidence → Review Center → Finalize review
+        → compile feedback → bounded resume/repair → promote
+```
+
+See [Review Center documentation](docs/REVIEW_CENTER.md) for configuration,
+route safety, troubleshooting, and migration details.
+
+![Animated Review Center workflow](docs/assets/review-center-workflow.gif)
+
+[Open the interactive local workflow walkthrough](docs/assets/review-center-workflow.html).
+
+## v0.5 review gate
+
+Version 0.5.0 writes source-preserving analysis contracts for structure, spoken
 forms, dialogue, prosody and TTS risk. After staging, run
 `audiobook-harness review PROJECT`; the loopback service saves review drafts
 directly under `production/`. Finalize decisions in the panel or with
@@ -167,7 +221,7 @@ and the documented repetition or editorial-authority threshold. Existing
 projects can inspect an upgrade with `audiobook-harness upgrade-project
 PROJECT`; applying it requires the reported inventory hash.
 
-Version 0.4.15 also exposes the production contract directly:
+Version 0.5.0 also exposes the production contract directly:
 
 ```bash
 audiobook-harness pipeline-audit PROJECT

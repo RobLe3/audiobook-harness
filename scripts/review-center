@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+PYTHON=${PYTHON:-"$ROOT/.venv/bin/python"}
+if [ ! -x "$PYTHON" ]; then
+  echo "Missing .venv Python; run scripts/setup.py first." >&2
+  exit 2
+fi
+exec "$PYTHON" -m audiobook_harness.cli review-center "$@"

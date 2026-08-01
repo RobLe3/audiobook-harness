@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "default_project": "example-book",
+  "projects": [
+    {"id": "example-book", "path": "projects/example-book", "display_name": "Example Book"}
+  ]
+}
