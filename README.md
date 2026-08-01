@@ -205,7 +205,17 @@ route safety, troubleshooting, and migration details.
 
 ![Animated Review Center workflow](docs/assets/review-center-workflow.gif)
 
-[Open the interactive local workflow walkthrough](docs/assets/review-center-workflow.html).
+GitHub can display the GIF above, but it intentionally does not execute
+JavaScript from repository HTML files. To use the interactive walkthrough
+locally, run:
+
+```bash
+cd docs/assets
+python3 -m http.server 8000
+# open http://127.0.0.1:8000/review-center-workflow.html
+```
+
+See [the local interactive walkthrough instructions](docs/assets/README.md).
 
 ## v0.5 review gate
 
