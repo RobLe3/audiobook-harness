@@ -303,3 +303,19 @@ def test_candidate_identity_changes_with_model_and_voice_assets():
         "engine_identity": {**values["engine_identity"], "model_sha256": "model-b"},
     }
     assert baseline != _candidate_identity(**changed)
+
+
+def test_reviewed_phoneme_replacement_is_idempotent_and_conflict_aware():
+    from audiobook_harness.pronunciation import resolve_reviewed_phoneme_replacement
+
+    status, value = resolve_reviewed_phoneme_replacement(
+        "x old y", before="old", after="new"
+    )
+    assert (status, value) == ("change_required", "x new y")
+    assert resolve_reviewed_phoneme_replacement(value, before="old", after="new") == (
+        "already_applied",
+        "x new y",
+    )
+    assert resolve_reviewed_phoneme_replacement(
+        "x third y", before="old", after="new"
+    ) == ("source_authority_conflict", "x third y")

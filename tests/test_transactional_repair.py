@@ -4,6 +4,7 @@ from audiobook_harness.resilience import (
     GateDisposition,
     GateResult,
     repair_ticket,
+    reopen_ticket_after_harness_correction,
     validate_phase_commit,
 )
 from audiobook_harness.review import carry_forward_findings
@@ -45,6 +46,38 @@ def test_repair_ticket_is_stable_and_input_bound() -> None:
     )
     assert first == second
     assert first.input_identity == "inputs"
+
+
+def test_exhausted_ticket_reopens_only_for_changed_harness() -> None:
+    result = GateResult(
+        gate="candidate_quality",
+        disposition=GateDisposition.REPAIR_ARTIFACT,
+        owner_phase=2,
+        evidence_fingerprint="evidence",
+        affected_units=("u1",),
+        remaining_attempts=1,
+        input_identity="inputs",
+    )
+    ticket = repair_ticket(
+        result,
+        action="contextual_rechunk",
+        expected_input_delta="chunk-plan",
+        implementation_fingerprint="old-code",
+    )
+    exhausted = type(ticket)(
+        **{**ticket.as_dict(), "status": "exhausted", "remaining_attempts": 0}
+    )
+    reopened = reopen_ticket_after_harness_correction(
+        exhausted, result, implementation_fingerprint="new-code"
+    )
+    assert reopened is not None and reopened.status == "queued"
+    assert reopened.implementation_fingerprint == "new-code"
+    assert (
+        reopen_ticket_after_harness_correction(
+            exhausted, result, implementation_fingerprint="old-code"
+        )
+        is None
+    )
 
 
 def test_rejected_finding_survives_waveform_change_but_not_approval() -> None:

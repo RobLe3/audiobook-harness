@@ -1,6 +1,6 @@
 # Audiobook Harness
 
-Current release: **0.4.10**. Audiobook Harness uses one SemVer product identity;
+Current release: **0.4.11**. Audiobook Harness uses one SemVer product identity;
 project names and profile hashes do not create a second harness version. See
 [versioning and compatibility](docs/VERSIONING.md).
 
@@ -9,12 +9,19 @@ It focuses on manuscript analysis, pronunciation control, contextual dialogue,
 Kokoro TTS, dual-checkpoint local Whisper verification, forced alignment, and reproducible
 M4A/MP3 delivery with staged promotion.
 
-Version 0.4.10 executes all eight phases as receipt-last transactions. Each
+Version 0.4.11 executes all eight phases as receipt-last transactions. Each
 phase has its own dependency identity, success predicates, retry policy, and
 structured result. A small harness or review-server change therefore cannot
 invalidate unrelated audio work. Failed implementation attempts roll back
 partial owned outputs; quality failures retain their evidence without creating
 a success receipt.
+
+Repair tickets are bound to both evidence and harness implementation identity.
+An exhausted repair is not repeated unchanged, but a tested harness correction
+can reopen it once with a fresh bounded budget. Reviewed phoneme replacements
+are idempotent: a correction already present in the current pronunciation plan
+continues to synthesis instead of failing because its obsolete source span is
+gone.
 
 Pronunciation overrides are now located on phoneme-token boundaries and are
 preflighted in several sentence positions before synthesis. Contextual G2P
@@ -120,7 +127,7 @@ container check; it never pulls an image or downloads a model.
 
 ## v0.4 review gate
 
-Version 0.4.10 writes source-preserving analysis contracts for structure, spoken
+Version 0.4.11 writes source-preserving analysis contracts for structure, spoken
 forms, dialogue, prosody and TTS risk. After staging, run
 `audiobook-harness review PROJECT`; the loopback service saves review drafts
 directly under `production/`. Finalize decisions in the panel or with
@@ -132,7 +139,7 @@ and the documented repetition or editorial-authority threshold. Existing
 projects can inspect an upgrade with `audiobook-harness upgrade-project
 PROJECT`; applying it requires the reported inventory hash.
 
-Version 0.4.10 also exposes the production contract directly:
+Version 0.4.11 also exposes the production contract directly:
 
 ```bash
 audiobook-harness pipeline-audit PROJECT

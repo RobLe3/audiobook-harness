@@ -10,6 +10,18 @@ from typing import Any
 from .project import project_paths, write_json
 
 
+def resolve_reviewed_phoneme_replacement(
+    phonemes: str, *, before: str, after: str
+) -> tuple[str, str]:
+    """Apply a reviewed repair idempotently and expose authority conflicts."""
+
+    if before in phonemes:
+        return "change_required", phonemes.replace(before, after, 1)
+    if after in phonemes:
+        return "already_applied", phonemes
+    return "source_authority_conflict", phonemes
+
+
 def load_reviewed_lexicon(project: Path) -> dict[str, dict[str, Any]]:
     path = project_paths(project)["lexicon"]
     data = (
@@ -287,7 +299,9 @@ def pronunciation_context_preflight(
     carriers = ("{term}.", "Before {term} arrived.", "We discussed {term} carefully.")
     rows = []
     for published, entry in lexicon.items():
-        if entry.get("review_status") != "reviewed" or not entry.get("phoneme_override"):
+        if entry.get("review_status") != "reviewed" or not entry.get(
+            "phoneme_override"
+        ):
             continue
         failures = []
         for template in carriers:
@@ -298,6 +312,15 @@ def pronunciation_context_preflight(
                     text, generated, {published: entry}, phonemize
                 )
             except ValueError as error:
-                failures.append({"text": text, "generated_phonemes": generated, "error": str(error)})
-        rows.append({"published": published, "contexts": len(carriers), "failures": failures, "ok": not failures})
+                failures.append(
+                    {"text": text, "generated_phonemes": generated, "error": str(error)}
+                )
+        rows.append(
+            {
+                "published": published,
+                "contexts": len(carriers),
+                "failures": failures,
+                "ok": not failures,
+            }
+        )
     return {"version": 1, "terms": rows, "ok": all(row["ok"] for row in rows)}

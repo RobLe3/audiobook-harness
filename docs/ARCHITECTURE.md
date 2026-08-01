@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes Audiobook Harness **0.4.10**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.11**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 ## Performance and render lineage
 
-Version 0.4.10 treats the clean performed speech as the immutable take. Channel,
+Version 0.4.11 treats the clean performed speech as the immutable take. Channel,
 codec, mastering, and presentation renders are derived identities whose hashes
 name their parent take and processor contract. Listener decisions can therefore
 remain attached to unchanged performances while a derived render is rebuilt.

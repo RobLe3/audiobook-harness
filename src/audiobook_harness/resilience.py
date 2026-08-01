@@ -67,6 +67,10 @@ class RepairTicket:
     action: str
     input_identity: str
     expected_input_delta: str
+    evidence_fingerprint: str = ""
+    attempt_id: str = ""
+    implementation_fingerprint: str = ""
+    status: str = "queued"
     remaining_attempts: int = 1
     fallback: GateDisposition = GateDisposition.REVIEW_REQUIRED
 
@@ -74,7 +78,13 @@ class RepairTicket:
         return asdict(self)
 
 
-def repair_ticket(result: GateResult, *, action: str, expected_input_delta: str) -> RepairTicket:
+def repair_ticket(
+    result: GateResult,
+    *,
+    action: str,
+    expected_input_delta: str,
+    implementation_fingerprint: str = "",
+) -> RepairTicket:
     """Create a stable repair ticket from current-attempt gate evidence."""
 
     value = {
@@ -84,6 +94,7 @@ def repair_ticket(result: GateResult, *, action: str, expected_input_delta: str)
         "action": action,
         "input_identity": result.input_identity,
         "evidence_fingerprint": result.evidence_fingerprint,
+        "implementation_fingerprint": implementation_fingerprint,
     }
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"))
     return RepairTicket(
@@ -94,7 +105,30 @@ def repair_ticket(result: GateResult, *, action: str, expected_input_delta: str)
         action=action,
         input_identity=result.input_identity,
         expected_input_delta=expected_input_delta,
+        evidence_fingerprint=result.evidence_fingerprint,
+        attempt_id=result.attempt_id,
+        implementation_fingerprint=implementation_fingerprint,
         remaining_attempts=max(0, result.remaining_attempts),
+    )
+
+
+def reopen_ticket_after_harness_correction(
+    ticket: RepairTicket,
+    result: GateResult,
+    *,
+    implementation_fingerprint: str,
+) -> RepairTicket | None:
+    """Reopen an exhausted repair once for a distinct tested implementation."""
+
+    if ticket.status != "exhausted":
+        return None
+    if ticket.implementation_fingerprint == implementation_fingerprint:
+        return None
+    return repair_ticket(
+        result,
+        action=ticket.action,
+        expected_input_delta="tested harness implementation changed",
+        implementation_fingerprint=implementation_fingerprint,
     )
 
 
