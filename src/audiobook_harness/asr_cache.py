@@ -18,7 +18,9 @@ CACHE_VERSION = 1
 
 
 def _canonical_sha256(value: object) -> str:
-    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    encoded = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
@@ -42,7 +44,9 @@ def load(path: Path) -> dict[str, Any]:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {"version": CACHE_VERSION, "entries": {}}
-    if value.get("version") != CACHE_VERSION or not isinstance(value.get("entries"), dict):
+    if value.get("version") != CACHE_VERSION or not isinstance(
+        value.get("entries"), dict
+    ):
         return {"version": CACHE_VERSION, "entries": {}}
     return value
 
@@ -51,5 +55,7 @@ def save(path: Path, cache: dict[str, Any]) -> None:
     """Publish cache updates atomically so an interrupted check cannot poison it."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
-    temporary.write_text(json.dumps(cache, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(cache, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     os.replace(temporary, path)

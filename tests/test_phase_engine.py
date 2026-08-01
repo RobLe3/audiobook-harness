@@ -49,12 +49,8 @@ def test_implementation_crash_restores_predecessor_and_invalidates_downstream(
     production.mkdir()
     artifact = production / "owned.json"
     artifact.write_text('{"version":"approved"}')
-    write_phase_receipt(
-        tmp_path, step=2, input_identity="old", artifacts=[artifact]
-    )
-    write_phase_receipt(
-        tmp_path, step=3, input_identity="old", artifacts=[artifact]
-    )
+    write_phase_receipt(tmp_path, step=2, input_identity="old", artifacts=[artifact])
+    write_phase_receipt(tmp_path, step=3, input_identity="old", artifacts=[artifact])
     phase = Phase(2, "test", (1,), ("owned.json",))
 
     def crash() -> None:

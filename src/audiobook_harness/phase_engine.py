@@ -11,7 +11,11 @@ from typing import Any, Callable
 
 from .pipeline import Phase
 from .project import write_json
-from .run_journal import append_event, invalidate_phase_receipts_from, write_phase_receipt
+from .run_journal import (
+    append_event,
+    invalidate_phase_receipts_from,
+    write_phase_receipt,
+)
 
 
 @dataclass(frozen=True)
@@ -74,7 +78,9 @@ def classify_failure(phase: Phase, error: BaseException) -> PhaseResult:
 
 def _validate_outputs(project: Path, phase: Phase) -> None:
     production = project / "production"
-    missing = [name for name in phase.required_artifacts if not (production / name).is_file()]
+    missing = [
+        name for name in phase.required_artifacts if not (production / name).is_file()
+    ]
     if missing:
         raise PhaseExecutionError(
             PhaseResult(
@@ -125,7 +131,9 @@ def execute_phase(
     production = project / "production"
     production.mkdir(parents=True, exist_ok=True)
     owned = [production / name for name in phase.required_artifacts]
-    backup_root = Path(tempfile.mkdtemp(prefix=f"phase-{phase.number}-", dir=production))
+    backup_root = Path(
+        tempfile.mkdtemp(prefix=f"phase-{phase.number}-", dir=production)
+    )
     existed: dict[Path, Path] = {}
     for path in owned:
         if path.is_file():

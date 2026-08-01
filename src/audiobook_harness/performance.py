@@ -32,7 +32,9 @@ class PerformanceProfile:
 
 def _memory_bytes() -> int | None:
     if platform.system() == "Darwin":
-        result = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            ["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, check=False
+        )
         if result.returncode == 0:
             try:
                 return int(result.stdout.strip())
@@ -45,12 +47,17 @@ def _memory_bytes() -> int | None:
 
 
 def resolve_profile(
-    mode: str = "legacy", *, logical_cpus: int | None = None, memory_bytes: int | None = None
+    mode: str = "legacy",
+    *,
+    logical_cpus: int | None = None,
+    memory_bytes: int | None = None,
 ) -> PerformanceProfile:
     """Return serial compatibility settings or a bounded auto-sized profile."""
     if mode not in {"legacy", "auto"}:
         raise ValueError("mode must be 'legacy' or 'auto'")
-    cpus = max(1, int(logical_cpus if logical_cpus is not None else os.cpu_count() or 1))
+    cpus = max(
+        1, int(logical_cpus if logical_cpus is not None else os.cpu_count() or 1)
+    )
     memory = _memory_bytes() if memory_bytes is None else memory_bytes
     if mode == "legacy":
         return PerformanceProfile(mode, cpus, memory, 0, 1, 1, False, False, 1, 0, 1)
@@ -58,6 +65,15 @@ def resolve_profile(
     budget = max(1, cpus - reserved)
     asr_workers = 2 if cpus >= 8 and (memory is None or memory >= 32 * 1024**3) else 1
     return PerformanceProfile(
-        mode, cpus, memory, reserved, budget, min(6, budget), budget > 1, True,
-        asr_workers, max(1, budget // asr_workers), min(4, max(1, budget // 3)),
+        mode,
+        cpus,
+        memory,
+        reserved,
+        budget,
+        min(6, budget),
+        budget > 1,
+        True,
+        asr_workers,
+        max(1, budget // asr_workers),
+        min(4, max(1, budget // 3)),
     )

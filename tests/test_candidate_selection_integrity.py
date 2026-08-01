@@ -9,7 +9,9 @@ def _project_with_selection(tmp_path: Path) -> Path:
     template = Path(__file__).parents[1] / "templates/project"
     project = tmp_path / "book"
     scaffold(project, template)
-    candidate = project / "assets/generated/candidates/chapter-01/u-0001/baseline-proof.flac"
+    candidate = (
+        project / "assets/generated/candidates/chapter-01/u-0001/baseline-proof.flac"
+    )
     candidate.parent.mkdir(parents=True)
     candidate.write_bytes(b"verified candidate bytes")
     row = {
@@ -40,7 +42,9 @@ def test_current_candidate_selection_is_accepted(tmp_path: Path):
 
 def test_rewritten_selected_audio_is_rejected(tmp_path: Path):
     project = _project_with_selection(tmp_path)
-    candidate = project / "assets/generated/candidates/chapter-01/u-0001/baseline-proof.flac"
+    candidate = (
+        project / "assets/generated/candidates/chapter-01/u-0001/baseline-proof.flac"
+    )
     candidate.write_bytes(b"different candidate bytes")
     report = audit_candidate_selection(project)
     assert report["ok"] is False
@@ -76,4 +80,7 @@ def test_stale_contextual_protocol_is_rejected_before_packaging(tmp_path: Path):
     (project / "production/verification.json").write_text(json.dumps(verification))
     report = audit_candidate_selection(project)
     assert report["ok"] is False
-    assert any(row["rule"] == "stale_contextual_performance_protocol" for row in report["errors"])
+    assert any(
+        row["rule"] == "stale_contextual_performance_protocol"
+        for row in report["errors"]
+    )

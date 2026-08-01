@@ -70,10 +70,14 @@ def write_phase_receipt(
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
-            raise ValueError(f"phase {step} predicate artifact is unavailable: {relative}") from error
+            raise ValueError(
+                f"phase {step} predicate artifact is unavailable: {relative}"
+            ) from error
         if not isinstance(value, dict) or value.get(field) is not True:
             raise ValueError(f"phase {step} predicate failed: {relative}.{field}")
-        predicate_evidence.append({"path": f"production/{relative}", "field": field, "value": True})
+        predicate_evidence.append(
+            {"path": f"production/{relative}", "field": field, "value": True}
+        )
     receipt = {
         "version": 1,
         "step": step,
@@ -120,10 +124,15 @@ def phase_receipt_is_valid(project: Path, *, step: int, input_identity: str) -> 
         if not isinstance(predicate, dict):
             return False
         try:
-            value = json.loads((project / str(predicate.get("path", ""))).read_text(encoding="utf-8"))
+            value = json.loads(
+                (project / str(predicate.get("path", ""))).read_text(encoding="utf-8")
+            )
         except (OSError, json.JSONDecodeError):
             return False
-        if not isinstance(value, dict) or value.get(str(predicate.get("field", ""))) is not True:
+        if (
+            not isinstance(value, dict)
+            or value.get(str(predicate.get("field", ""))) is not True
+        ):
             return False
     return True
 

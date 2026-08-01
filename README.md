@@ -1,15 +1,19 @@
 # Audiobook Harness
 
-Current release: **0.4.13**. Audiobook Harness uses one SemVer product identity;
+Current release: **0.4.14**. Audiobook Harness uses one SemVer product identity;
 project names and profile hashes do not create a second harness version. See
 [versioning and compatibility](docs/VERSIONING.md).
+
+The hash-bound outstanding-work model separates automatic repair, current
+verification, cross-episode dependencies, focused listener review, completion,
+and fatal implementation faults. Automatic work always precedes review.
 
 A local-first, evidence-based audiobook production harness for coding agents.
 It focuses on manuscript analysis, pronunciation control, contextual dialogue,
 Kokoro TTS, dual-checkpoint local Whisper verification, forced alignment, and reproducible
 M4A/MP3 delivery with staged promotion.
 
-Version 0.4.13 executes all eight phases as receipt-last transactions. Each
+Version 0.4.14 executes all eight phases as receipt-last transactions. Each
 phase has its own dependency identity, success predicates, retry policy, and
 structured result. A small harness or review-server change therefore cannot
 invalidate unrelated audio work. Failed implementation attempts roll back
@@ -151,7 +155,7 @@ container check; it never pulls an image or downloads a model.
 
 ## v0.4 review gate
 
-Version 0.4.13 writes source-preserving analysis contracts for structure, spoken
+Version 0.4.14 writes source-preserving analysis contracts for structure, spoken
 forms, dialogue, prosody and TTS risk. After staging, run
 `audiobook-harness review PROJECT`; the loopback service saves review drafts
 directly under `production/`. Finalize decisions in the panel or with
@@ -163,7 +167,7 @@ and the documented repetition or editorial-authority threshold. Existing
 projects can inspect an upgrade with `audiobook-harness upgrade-project
 PROJECT`; applying it requires the reported inventory hash.
 
-Version 0.4.13 also exposes the production contract directly:
+Version 0.4.14 also exposes the production contract directly:
 
 ```bash
 audiobook-harness pipeline-audit PROJECT
