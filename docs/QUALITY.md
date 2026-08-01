@@ -1,6 +1,6 @@
 # Quality contract
 
-This document describes Audiobook Harness **0.4.11**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.12**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 ## Transactional quality authority
 
@@ -174,3 +174,22 @@ ledger contains no manuscript or audio. The same terminal failure is not given
 another automatic retry until the source, configuration, lexicon, model lock or
 harness code changes. This prevents repeated work without converting a failure
 into a pass.
+
+### Evidence-fused repair diagnosis
+
+Verification writes a complete candidate-evidence table before repair routing.
+`repair-diagnosis.json` classifies each rejected unit from dual-ASR disagreement,
+acoustic failure types, duration evidence, and the median pace of passing units
+in the same project. `repair-plan.json` names the owning phase, evidence
+requirements, bounded attempt count, and fallback for each strategy. A retry is
+allowed only when its strategy changes a declared input or when cached evidence
+can be reverified; an unchanged failed waveform is not a new repair.
+
+Pinned local tools may precompute CTC alignment confidence, NISQA/UTMOS, or
+speaker-similarity evidence under `production/advisory/`. The harness records
+availability explicitly and uses these values only to rank candidates and
+prioritize listening. Missing advisory models are a normal state, never a
+reason to download a model during production, and no advisory score has release
+authority. Listener decisions are stored as compact repair outcomes. Historical
+success can reorder otherwise eligible strategies, but cannot relax WER,
+alignment, pronunciation, acoustic, or perceptual-review gates.

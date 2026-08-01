@@ -23,6 +23,8 @@ from .pronunciation import (
     reviewed_phrase_equivalence,
 )
 from .selection_integrity import audit_candidate_selection
+from .advisory_quality import collect_advisory_scores
+from .repair_analysis import build_repair_artifacts
 from .asr_cache import evidence_key, load as load_asr_cache, save as save_asr_cache
 from .performance import resolve_profile
 
@@ -556,6 +558,7 @@ def verify(
         grouped.setdefault(str(row["id"]), []).append(row)
     selected: list[dict[str, Any]] = []
     failures: list[str] = []
+    candidate_evidence: dict[str, list[dict[str, Any]]] = {}
     for unit_id, options in grouped.items():
         attempts = []
         for take in options:
@@ -615,6 +618,7 @@ def verify(
                 6,
             )
             attempts.append(attempt)
+        candidate_evidence[unit_id] = attempts
         passing = [row for row in attempts if row["ok"]]
         passing.sort(
             key=lambda row: (
@@ -667,6 +671,7 @@ def verify(
         "forced_alignment": alignment,
         "takes": selected,
         "failures": failures,
+        "candidate_evidence": candidate_evidence,
         "asr_equivalences": len(equivalents),
         "asr_performance": {
             "device": ASR_DEVICE,
@@ -755,6 +760,8 @@ def verify(
         },
     )
     build_quality_measurements(project)
+    collect_advisory_scores(project)
+    build_repair_artifacts(project, report)
     return report
 
 

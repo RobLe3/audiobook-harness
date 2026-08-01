@@ -154,7 +154,7 @@ def _verified_stage(
     (project / "production/stage-manifest.json").write_text(json.dumps(manifest))
     review = build_review(project, stage)
     assert review["version"] == 3
-    assert review["audiobook_harness_version"] == "0.4.11"
+    assert review["audiobook_harness_version"] == "0.4.12"
     finalize_review(
         project, [{"id": row["id"], "decision": "approve"} for row in review["items"]]
     )
@@ -316,6 +316,20 @@ def test_produce_repairs_failed_units_once_then_stages(
             path = value / "production" / name
             if not path.exists():
                 path.write_text('{"ok":true}')
+        if not result.get("ok"):
+            (value / "production/repair-plan.json").write_text(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "repairs": [
+                            {
+                                "unit": "chapter-01-u001",
+                                "strategy": {"id": "bounded_pace_resynthesis"},
+                            }
+                        ],
+                    }
+                )
+            )
         return result
 
     monkeypatch.setattr(cli, "verify", fake_verify)
@@ -331,11 +345,15 @@ def test_produce_repairs_failed_units_once_then_stages(
             (value / "production" / name).write_text('{"ok":true}')
         return {"ok": True}
 
-    monkeypatch.setattr(cli, "prepare_release_contract", lambda value: fake_phase(value, 5))
+    monkeypatch.setattr(
+        cli, "prepare_release_contract", lambda value: fake_phase(value, 5)
+    )
     monkeypatch.setattr(cli, "assemble_selected", lambda value: fake_phase(value, 6))
     monkeypatch.setattr(cli, "post_mix_quality", lambda value: fake_phase(value, 7))
 
-    def fake_stage(value: Path, output: Path | None, *, reuse_verified_phases: bool = False):
+    def fake_stage(
+        value: Path, output: Path | None, *, reuse_verified_phases: bool = False
+    ):
         result = {"state": "staged"}
         fake_phase(value, 8)
         (value / "production/stage-manifest.json").write_text(json.dumps(result))
@@ -376,7 +394,9 @@ def test_produce_resume_dry_run_starts_at_first_missing_phase(tmp_path: Path):
         project,
         step=1,
         input_identity=identity,
-        artifacts=[project / "production" / name for name in cli.PHASES[0].required_artifacts],
+        artifacts=[
+            project / "production" / name for name in cli.PHASES[0].required_artifacts
+        ],
     )
 
     result = cli.produce(

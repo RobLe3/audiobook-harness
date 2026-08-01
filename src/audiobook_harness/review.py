@@ -14,6 +14,7 @@ from . import __version__
 from .feedback import append_observations, compile_feedback, validate_decisions
 from .parity import project_profile_identity
 from .project import write_json
+from .repair_analysis import RepairOutcome, append_repair_outcome
 from .status import asr_activity, owner_activity
 
 
@@ -188,6 +189,7 @@ def build_review(project: Path, stage: Path | None = None) -> dict[str, Any]:
     prosody_map = _map_units(production / "discourse-prosody-map.json")
     energy_map = _map_units(production / "speaker-energy-map.json")
     risk_map = {str(row["unit"]): row for row in risks}
+    repair_plan = _map_repairs(production / "repair-plan.json")
     chapter_files = {
         str(row["chapter"]): [str(item["file"]) for item in row.get("files", [])]
         for row in staged.get("outputs", [])
@@ -260,6 +262,7 @@ def build_review(project: Path, stage: Path | None = None) -> dict[str, Any]:
                         "prosody": prosody_map.get(unit_id),
                         "energy": energy_map.get(unit_id),
                         "risk": risk_map.get(unit_id),
+                        "repair": repair_plan.get(unit_id),
                         "primary_wer": take.get("primary_wer"),
                         "secondary_wer": take.get("secondary_wer"),
                     },
@@ -325,6 +328,18 @@ def _map_units(path: Path) -> dict[str, Any]:
     }
 
 
+def _map_repairs(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {
+        str(row.get("unit")): row
+        for row in value.get("repairs", [])
+        if isinstance(row, dict) and row.get("unit")
+    }
+
+
 def finalize_review(project: Path, decisions: list[dict[str, Any]]) -> dict[str, Any]:
     production = project / "production"
     manifest = json.loads((production / "review-manifest.json").read_text())
@@ -345,6 +360,43 @@ def finalize_review(project: Path, decisions: list[dict[str, Any]]) -> dict[str,
     report["decisions_sha256"] = _canonical(decisions)
     write_json(production / "review-decisions.json", report)
     append_observations(project, manifest, decisions)
+    items = {
+        str(row.get("id")): row
+        for row in manifest.get("items", [])
+        if isinstance(row, dict) and row.get("id")
+    }
+    for decision in decisions:
+        item = items.get(str(decision.get("id")), {})
+        repair = item.get("machine_evidence", {}).get("repair")
+        strategy = (
+            repair.get("strategy", {}).get("id") if isinstance(repair, dict) else None
+        )
+        if not strategy:
+            continue
+        listener_result = {
+            "approve": "accepted",
+            "reject": "rejected",
+            "uncertain": "uncertain",
+        }.get(str(decision.get("decision")), "uncertain")
+        append_repair_outcome(
+            project,
+            RepairOutcome(
+                defect=str(
+                    decision.get("defect_category")
+                    or repair.get("diagnosis_category")
+                    or "candidate_quality"
+                ),
+                context=str(item.get("kind") or "review_item"),
+                strategies_attempted=(str(strategy),),
+                accepted_strategy=str(strategy)
+                if listener_result == "accepted"
+                else None,
+                listener_result=listener_result,
+                objective_evidence_sha256=str(
+                    repair.get("diagnosis_identity_sha256") or ""
+                ),
+            ),
+        )
     report["feedback"] = compile_feedback(project)
     return report
 
@@ -385,7 +437,11 @@ def review_status(project: Path) -> dict[str, Any]:
     journal = production / "phase-events.jsonl"
     try:
         latest_event = json.loads(
-            next(line for line in reversed(journal.read_text(encoding="utf-8").splitlines()) if line.strip())
+            next(
+                line
+                for line in reversed(journal.read_text(encoding="utf-8").splitlines())
+                if line.strip()
+            )
         )
     except (OSError, StopIteration, json.JSONDecodeError):
         latest_event = {}

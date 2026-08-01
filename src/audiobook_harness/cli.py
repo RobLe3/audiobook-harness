@@ -21,6 +21,7 @@ from .resilience import (
     production_input_identity,
     terminal_signatures,
 )
+from .repair_analysis import automatic_execution_mode
 from .status import render_status, watch, write_run_status
 from .tts import (
     assemble_selected,
@@ -232,7 +233,9 @@ def produce(
         generation = (
             run_phase(2, lambda: generate(project, REPO))
             if first_step <= 2
-            else json.loads((production / "candidates.json").read_text(encoding="utf-8"))
+            else json.loads(
+                (production / "candidates.json").read_text(encoding="utf-8")
+            )
         )
         if first_step <= 3:
             run_phase(3, lambda: realize_generation_manifest(project))
@@ -269,10 +272,20 @@ def produce(
             )
             if decision.get("retry") is True:
                 retries += 1
-                generation = run_phase(
-                    2, lambda: generate(project, REPO, failed_only=True)
+                repair_plan = json.loads(
+                    (production / "repair-plan.json").read_text(encoding="utf-8")
                 )
-                run_phase(3, lambda: realize_generation_manifest(project))
+                execution_mode = automatic_execution_mode(repair_plan)
+                if execution_mode == "review_required":
+                    raise RuntimeError(
+                        "Automatic repair requires semantic restructuring or focused review; "
+                        "inspect production/repair-plan.json."
+                    )
+                if execution_mode == "regenerate_failed_units":
+                    generation = run_phase(
+                        2, lambda: generate(project, REPO, failed_only=True)
+                    )
+                    run_phase(3, lambda: realize_generation_manifest(project))
                 try:
                     verification = run_phase(
                         4,
@@ -321,7 +334,9 @@ def produce(
                 lambda: stage(project, output, reuse_verified_phases=True),
             )
             if first_step <= 8
-            else json.loads((production / "stage-manifest.json").read_text(encoding="utf-8"))
+            else json.loads(
+                (production / "stage-manifest.json").read_text(encoding="utf-8")
+            )
         )
     except BaseException as error:
         write_run_status(

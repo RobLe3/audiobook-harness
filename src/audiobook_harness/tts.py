@@ -21,6 +21,7 @@ from .pronunciation import (
     load_reviewed_lexicon,
     pronunciation_context_preflight,
 )
+from .boundary_repair import boundary_discontinuity
 from .selection_integrity import audit_candidate_selection
 from .review import build_review, review_is_approved
 from .context_protocol import protocol_for_unit
@@ -127,8 +128,12 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
         context_preflight,
     )
     if not context_preflight["ok"]:
-        failed_terms = [row["published"] for row in context_preflight["terms"] if not row["ok"]]
-        raise ValueError(f"Reviewed pronunciation context preflight failed: {failed_terms}")
+        failed_terms = [
+            row["published"] for row in context_preflight["terms"] if not row["ok"]
+        ]
+        raise ValueError(
+            f"Reviewed pronunciation context preflight failed: {failed_terms}"
+        )
     engine_identity = {
         "model_sha256": sha256(model),
         "voices_sha256": sha256(voices),
@@ -260,7 +265,9 @@ def generate(project: Path, repo: Path, *, failed_only: bool = False) -> dict[st
 def realize_generation_manifest(project: Path) -> dict[str, Any]:
     """Commit the selected synthesis inventory as its own replayable phase."""
     production = project_paths(project)["production"]
-    candidates = json.loads((production / "candidates.json").read_text(encoding="utf-8"))
+    candidates = json.loads(
+        (production / "candidates.json").read_text(encoding="utf-8")
+    )
     report = {
         "version": 3,
         "audiobook_harness_version": __version__,
@@ -298,6 +305,7 @@ def _package(
         timeline = []
         cursor = 0
         rate = SAMPLE_RATE
+        previous_raw: np.ndarray | None = None
         for index, row in enumerate(takes):
             audio, source_rate = sf.read(
                 project / str(row["file"]), dtype="float32", always_2d=False
@@ -309,6 +317,11 @@ def _package(
             mono = np.mean(audio, axis=1) if np.ndim(audio) > 1 else np.asarray(audio)
             fade = min(len(mono) // 2, max(1, int(rate * 0.005)))
             rendered = np.asarray(mono, dtype=np.float32).copy()
+            raw_join = (
+                boundary_discontinuity(previous_raw, rendered)
+                if previous_raw is not None
+                else None
+            )
             if fade:
                 rendered[:fade] *= np.linspace(0.0, 1.0, fade, dtype=np.float32)
                 rendered[-fade:] *= np.linspace(1.0, 0.0, fade, dtype=np.float32)
@@ -329,12 +342,15 @@ def _package(
                     "end_seconds": end,
                     "pause_after_ms": pause_ms,
                     "fade_protection_ms": round(fade * 1000 / rate, 3),
+                    "raw_pre_pause_join": raw_join,
+                    "boundary_repair": "authored_pause_plus_five_ms_fade_protection",
                 }
             )
             if pause_ms:
                 silence = np.zeros(round(rate * pause_ms / 1000), dtype=np.float32)
                 segments.append(silence)
                 cursor += len(silence)
+            previous_raw = np.asarray(mono, dtype=np.float32)
         sf.write(
             assembled,
             np.concatenate(segments) if segments else np.zeros(1, dtype=np.float32),
@@ -414,7 +430,9 @@ def prepare_release_contract(project: Path) -> dict[str, Any]:
         raise RuntimeError("Cannot prepare release: verification is not successful")
     integrity = audit_candidate_selection(project, verification)
     if not integrity["ok"]:
-        raise RuntimeError("Cannot prepare release: candidate selection integrity failed")
+        raise RuntimeError(
+            "Cannot prepare release: candidate selection integrity failed"
+        )
     report = {
         "version": 1,
         "verification_sha256": sha256(paths["production"] / "verification.json"),
@@ -445,7 +463,9 @@ def post_mix_quality(project: Path) -> dict[str, Any]:
         "version": 2,
         "scope": "assembled_pcm",
         "ordered_units": [row["id"] for row in ordered],
-        "expected_units": sum(len(chapter.get("units", [])) for chapter in analysis.get("chapters", [])),
+        "expected_units": sum(
+            len(chapter.get("units", [])) for chapter in analysis.get("chapters", [])
+        ),
         "assembly_sha256": sha256(paths["production"] / "assembly-manifest.json"),
     }
     fidelity["ok"] = len(fidelity["ordered_units"]) == fidelity["expected_units"]
@@ -454,14 +474,21 @@ def post_mix_quality(project: Path) -> dict[str, Any]:
         {
             "chapter": row["chapter"],
             "last_unit": row["units"][-1]["unit"] if row.get("units") else None,
-            "trailing_hold_ms": row["units"][-1]["pause_after_ms"] if row.get("units") else 0,
-            "ok": bool(row.get("units")) and int(row["units"][-1]["pause_after_ms"]) >= 1500,
+            "trailing_hold_ms": row["units"][-1]["pause_after_ms"]
+            if row.get("units")
+            else 0,
+            "ok": bool(row.get("units"))
+            and int(row["units"][-1]["pause_after_ms"]) >= 1500,
         }
         for row in assembly.get("chapters", [])
     ]
     write_json(
         paths["production"] / "chapter-ending-audit.json",
-        {"version": 1, "chapters": ending_rows, "ok": bool(ending_rows) and all(row["ok"] for row in ending_rows)},
+        {
+            "version": 1,
+            "chapters": ending_rows,
+            "ok": bool(ending_rows) and all(row["ok"] for row in ending_rows),
+        },
     )
     return fidelity
 
@@ -478,22 +505,48 @@ def encode_assembled(project: Path, output: Path) -> list[dict[str, Any]]:
         "mp3": (".mp3", "libmp3lame", ["-b:a", "256k"]),
     }
     requested = config.get("outputs", ["m4a", "mp3"])
-    if not isinstance(requested, list) or not requested or any(value not in formats for value in requested):
-        raise ValueError("project.yaml outputs must contain one or more of: flac, m4a, mp3")
+    if (
+        not isinstance(requested, list)
+        or not requested
+        or any(value not in formats for value in requested)
+    ):
+        raise ValueError(
+            "project.yaml outputs must contain one or more of: flac, m4a, mp3"
+        )
     outputs = []
     for chapter in assembly.get("chapters", []):
         source = project / str(chapter["assembled_source"])
-        if not source.is_file() or sha256(source) != chapter.get("assembled_source_sha256"):
+        if not source.is_file() or sha256(source) != chapter.get(
+            "assembled_source_sha256"
+        ):
             raise RuntimeError(f"Assembled PCM authority changed: {source}")
         files = []
         for suffix, codec, extra in (formats[str(value)] for value in requested):
             target = output / f"{chapter['chapter']}_Audiobook{suffix}"
             target.parent.mkdir(parents=True, exist_ok=True)
             subprocess.run(
-                ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(source), "-c:a", codec, *extra, str(target)],
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-i",
+                    str(source),
+                    "-c:a",
+                    codec,
+                    *extra,
+                    str(target),
+                ],
                 check=True,
             )
-            files.append({"file": str(target.relative_to(output)), "sha256": sha256(target), "bytes": target.stat().st_size})
+            files.append(
+                {
+                    "file": str(target.relative_to(output)),
+                    "sha256": sha256(target),
+                    "bytes": target.stat().st_size,
+                }
+            )
         outputs.append({"chapter": chapter["chapter"], "files": files})
     return outputs
 
@@ -598,7 +651,9 @@ def _stage_into(
             "chapter-ending-audit.json",
         ):
             if not (paths["production"] / name).is_file():
-                raise RuntimeError(f"Packaging cannot reuse missing phase artifact: {name}")
+                raise RuntimeError(
+                    f"Packaging cannot reuse missing phase artifact: {name}"
+                )
     root = _prepare_stage_directory(project, output)
     outputs = encode_assembled(project, root)
     ordered_takes = _validated_ordered_takes(project, list(verification["takes"]))
@@ -622,9 +677,7 @@ def _stage_into(
         probe = _probe_audio(target)
         chapter = assembly_by_chapter.get(chapter_by_file.get(relative, ""), {})
         units = chapter.get("units", []) if isinstance(chapter, dict) else []
-        master_tail = (
-            float(units[-1].get("pause_after_ms", 0)) / 1000 if units else 0.0
-        )
+        master_tail = float(units[-1].get("pause_after_ms", 0)) / 1000 if units else 0.0
         tail = encoded_tail_result(
             master_tail_seconds=master_tail,
             encoded_tail_seconds=probe.get("trailing_silence_seconds"),
@@ -746,7 +799,9 @@ def stage(
                         "Refusing to replace a non-empty directory not owned by Audiobook Harness"
                     ) from None
                 if ownership.get("project") != str(project.resolve()):
-                    raise RuntimeError("Staging directory belongs to a different project")
+                    raise RuntimeError(
+                        "Staging directory belongs to a different project"
+                    )
             target.replace(backup)
         temporary.replace(target)
         shutil.rmtree(backup, ignore_errors=True)

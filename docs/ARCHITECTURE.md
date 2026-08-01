@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes Audiobook Harness **0.4.11**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.12**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 ## Performance and render lineage
 
-Version 0.4.11 treats the clean performed speech as the immutable take. Channel,
+Version 0.4.12 treats the clean performed speech as the immutable take. Channel,
 codec, mastering, and presentation renders are derived identities whose hashes
 name their parent take and processor contract. Listener decisions can therefore
 remain attached to unchanged performances while a derived render is rebuilt.
@@ -66,6 +66,21 @@ The repair phase regenerates only unit IDs rejected by the current verification
 report. It does not retry dictionary, corpus, missing-model, implementation or
 other prerequisite failures. It does not alter WER, acoustic, alignment or
 pronunciation acceptance limits.
+
+Repair routing is evidence-first. Phase 4 commits candidate-level evidence,
+`repair-diagnosis.json`, `repair-plan.json`, and `advisory-quality.json` as one
+transaction. The plan distinguishes cached re-verification, pronunciation,
+performance-plan, contextual synthesis, safe semantic re-chunking, assembly
+boundary work, predecessor retention, and focused review. Only strategies with
+an implemented deterministic executor may run automatically. Every other
+outcome stops with an explicit review or harness-work item rather than falling
+back to an unchanged retry.
+
+Phase 6 records raw join discontinuity measurements while retaining authored
+pause and fade protection. The reusable boundary module also provides a
+deterministic equal-power crossfade primitive for an explicitly planned
+assembly-only repair; it is never applied to active speech merely to hide a
+content or timing failure.
 
 The recovery signature includes the failed unit IDs and an input identity
 derived from source text, project configuration, the reviewed lexicon, model

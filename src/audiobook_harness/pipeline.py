@@ -77,6 +77,9 @@ PHASES = (
             "pause-economy-lint.json",
             "energy-lint.json",
             "expressive-realization.json",
+            "repair-diagnosis.json",
+            "repair-plan.json",
+            "advisory-quality.json",
         ),
         (
             ("verification.json", "ok"),
@@ -87,7 +90,13 @@ PHASES = (
             ("energy-lint.json", "ok"),
             ("expressive-realization.json", "ok"),
         ),
-        ("quality.py", "candidate_selection.py", "asr_cache.py"),
+        (
+            "quality.py",
+            "candidate_selection.py",
+            "asr_cache.py",
+            "repair_analysis.py",
+            "advisory_quality.py",
+        ),
         2,
     ),
     Phase(
@@ -104,7 +113,10 @@ PHASES = (
         (5,),
         ("assembly-manifest.json",),
         (("assembly-manifest.json", "ok"),),
-        ("tts.py#assemble_selected,_package,_validated_ordered_takes",),
+        (
+            "tts.py#assemble_selected,_package,_validated_ordered_takes",
+            "boundary_repair.py",
+        ),
     ),
     Phase(
         7,
@@ -159,7 +171,11 @@ def pipeline_contract() -> dict[str, Any]:
 
 def phase_input_identity(project: Path, repo: Path, phase: Phase) -> str:
     """Hash only authored inputs, predecessor receipts, and phase-owned code."""
-    paths = [project / "project.yaml", project / "lexicon.json", repo / "models.lock.json"]
+    paths = [
+        project / "project.yaml",
+        project / "lexicon.json",
+        repo / "models.lock.json",
+    ]
     paths.extend(sorted((project / "source").glob("*.txt")))
     package = repo / "src/audiobook_harness"
     implementation: list[tuple[str, Path, tuple[str, ...]]] = []
@@ -193,7 +209,12 @@ def phase_input_identity(project: Path, repo: Path, phase: Phase) -> str:
             tree = ast.parse(content)
             chunks = []
             for node in tree.body:
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name in selectors:
+                if (
+                    isinstance(
+                        node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                    )
+                    and node.name in selectors
+                ):
                     segment = ast.get_source_segment(content, node)
                     if segment is not None:
                         chunks.append(segment)
@@ -215,7 +236,9 @@ def phase_input_identity(project: Path, repo: Path, phase: Phase) -> str:
         "phase": phase.number,
         "inputs": rows,
     }
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def audit_pipeline(project: Path) -> dict[str, Any]:
