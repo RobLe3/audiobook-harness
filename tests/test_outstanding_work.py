@@ -1,7 +1,7 @@
 from audiobook_harness.outstanding_work import reconcile_outstanding_work
 
 
-def test_missing_evidence_outranks_review() -> None:
+def test_review_gate_outranks_missing_evidence() -> None:
     report = reconcile_outstanding_work(
         [
             {
@@ -12,8 +12,8 @@ def test_missing_evidence_outranks_review() -> None:
             }
         ]
     )
-    assert report["items"][0]["state"] == "verification_pending"
-    assert report["automatic_work_remaining"] is True
+    assert report["items"][0]["state"] == "review_required"
+    assert report["automatic_work_remaining"] is False
 
 
 def test_dependency_prevents_premature_resume() -> None:

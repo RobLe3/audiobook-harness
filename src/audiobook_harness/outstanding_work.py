@@ -42,16 +42,20 @@ def reconcile_outstanding_work(
         dependencies = [
             str(value) for value in episode.get("unresolved_dependencies", [])
         ]
+        # An explicit review gate is authoritative for the affected episode.
+        # Missing downstream files must not turn a human decision into an
+        # endless automatic retry.  Dependencies are considered only after
+        # the episode has no local review obligation.
         if episode.get("complete") is True:
             state, action = "complete", "none"
+        elif review:
+            state, action = "review_required", "build_focused_review"
         elif dependencies:
             state, action = "waiting_dependency", "none"
         elif missing:
             state, action = "verification_pending", "verify_current_outputs"
         elif repairable:
             state, action = "executable", "execute_bounded_repair"
-        elif review:
-            state, action = "review_required", "build_focused_review"
         elif episode.get("fatal_error"):
             state, action = "fatal", "tested_harness_correction"
         else:

@@ -154,7 +154,7 @@ def _verified_stage(
     (project / "production/stage-manifest.json").write_text(json.dumps(manifest))
     review = build_review(project, stage)
     assert review["version"] == 3
-    assert review["audiobook_harness_version"] == "0.4.14"
+    assert review["audiobook_harness_version"] == "0.4.15"
     finalize_review(
         project, [{"id": row["id"], "decision": "approve"} for row in review["items"]]
     )
