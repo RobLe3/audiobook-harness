@@ -15,6 +15,7 @@ from rapidfuzz.distance import Levenshtein
 from . import __version__
 from .measurements import build_quality_measurements
 from .candidate_scheduler import build_candidate_strategy_ledger
+from .effective_cue_state import build_effective_cue_state
 from .project import load_project, normalized_words, project_paths, sha256, write_json
 from .pronunciation import (
     asr_equivalences,
@@ -762,6 +763,7 @@ def verify(
     build_quality_measurements(project)
     collect_advisory_scores(project)
     build_repair_artifacts(project, report)
+    build_effective_cue_state(project, report)
     return report
 
 

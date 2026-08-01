@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes Audiobook Harness **0.4.12**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.13**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 ## Performance and render lineage
 
-Version 0.4.12 treats the clean performed speech as the immutable take. Channel,
+Version 0.4.13 treats the clean performed speech as the immutable take. Channel,
 codec, mastering, and presentation renders are derived identities whose hashes
 name their parent take and processor contract. Listener decisions can therefore
 remain attached to unchanged performances while a derived render is rebuilt.
@@ -68,8 +68,10 @@ other prerequisite failures. It does not alter WER, acoustic, alignment or
 pronunciation acceptance limits.
 
 Repair routing is evidence-first. Phase 4 commits candidate-level evidence,
-`repair-diagnosis.json`, `repair-plan.json`, and `advisory-quality.json` as one
-transaction. The plan distinguishes cached re-verification, pronunciation,
+`repair-diagnosis.json`, `repair-plan.json`, `effective-cue-state.json`, and
+`advisory-quality.json` as one transaction. The reconciled cue state prevents a
+provisional candidate selection from contradicting a later gate. The plan
+distinguishes cached re-verification, pronunciation,
 performance-plan, contextual synthesis, safe semantic re-chunking, assembly
 boundary work, predecessor retention, and focused review. Only strategies with
 an implemented deterministic executor may run automatically. Every other

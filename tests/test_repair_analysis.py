@@ -17,6 +17,7 @@ from audiobook_harness.repair_analysis import (
     build_repair_artifacts,
     strategy_priors,
 )
+from audiobook_harness.duration_repair import localized_duration_repair_plan
 
 
 def test_repair_diagnosis_routes_dual_asr_failure_to_pronunciation(tmp_path: Path):
@@ -95,8 +96,38 @@ def test_repair_outcomes_are_deduplicated_and_rank_accepted_strategy(tmp_path: P
     path = append_repair_outcome(project, outcome)
     append_repair_outcome(project, outcome)
 
-    assert len(path.read_text(encoding="utf-8").splitlines()) == 1
+    for index in range(1, 5):
+        append_repair_outcome(
+            project,
+            RepairOutcome(
+                defect="stretch_or_timing",
+                context="high_risk_unit",
+                strategies_attempted=("bounded_pace_resynthesis",),
+                accepted_strategy="bounded_pace_resynthesis",
+                listener_result="accepted",
+                objective_evidence_sha256=f"evidence-{index}",
+            ),
+        )
+
+    assert len(path.read_text(encoding="utf-8").splitlines()) == 5
     assert strategy_priors(project, "stretch_or_timing") == ["bounded_pace_resynthesis"]
+
+
+def test_repair_priors_ignore_small_samples(tmp_path: Path):
+    project = tmp_path / "book"
+    append_repair_outcome(
+        project,
+        RepairOutcome(
+            defect="pronunciation",
+            context="short_dialogue",
+            strategies_attempted=("reviewed_pronunciation_repair",),
+            accepted_strategy="reviewed_pronunciation_repair",
+            listener_result="accepted",
+            objective_evidence_sha256="one",
+        ),
+    )
+
+    assert strategy_priors(project, "pronunciation") == []
 
 
 def test_advisory_scorers_are_explicitly_unavailable_and_non_authoritative(
@@ -128,3 +159,25 @@ def test_boundary_helpers_measure_and_repair_only_declared_span():
     assert len(joined) == 4
     assert joined[0] == left[0]
     assert joined[-1] == right[-1]
+
+
+def test_local_duration_repair_is_bounded_and_never_release_authority():
+    mild = localized_duration_repair_plan(
+        start_seconds=1.0,
+        end_seconds=1.5,
+        target_duration_seconds=0.45,
+        prominence_protected=False,
+        duration_correction_eligible=True,
+    )
+    severe = localized_duration_repair_plan(
+        start_seconds=1.0,
+        end_seconds=1.6,
+        target_duration_seconds=0.35,
+        prominence_protected=False,
+        duration_correction_eligible=True,
+    )
+
+    assert mild["eligible"]
+    assert not mild["automatic_release_authority"]
+    assert not severe["eligible"]
+    assert severe["reason"] == "requires_contextual_resynthesis"

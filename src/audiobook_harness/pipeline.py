@@ -79,6 +79,7 @@ PHASES = (
             "expressive-realization.json",
             "repair-diagnosis.json",
             "repair-plan.json",
+            "effective-cue-state.json",
             "advisory-quality.json",
         ),
         (

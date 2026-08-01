@@ -43,6 +43,9 @@ class RepairOutcome:
     accepted_strategy: str | None
     listener_result: str
     objective_evidence_sha256: str
+    speaker_channel_class: str = "unspecified"
+    word_count_bucket: str = "unspecified"
+    terminality: str = "unspecified"
 
 
 STRATEGIES = {
@@ -72,6 +75,30 @@ STRATEGIES = {
             2,
             True,
             ("candidate_evidence", "untried_speed_variant"),
+            1,
+            "contextual_resynthesis",
+        ),
+        RepairStrategy(
+            "contextual_terminal_resynthesis",
+            2,
+            True,
+            ("context_span", "terminal_alignment"),
+            1,
+            "contextual_resynthesis",
+        ),
+        RepairStrategy(
+            "semantic_bridge_resynthesis",
+            2,
+            True,
+            ("word_duration_target", "context_span", "prominence_policy"),
+            2,
+            "semantic_rechunk",
+        ),
+        RepairStrategy(
+            "phrase_aware_spoken_form",
+            2,
+            True,
+            ("reviewed_spoken_form", "phrase_alignment"),
             1,
             "contextual_resynthesis",
         ),
@@ -138,12 +165,19 @@ def _diagnose_unit(
         return RepairDiagnosis(
             unit, tuple(categories), 4, 1.0, (), "reverify_cached_evidence", "blocked"
         )
+    explicit = {
+        str(row.get("defect_category"))
+        for row in attempts
+        if row.get("defect_category")
+    }
     primary = min((float(row.get("primary_wer", 1.0)) for row in attempts), default=1.0)
     secondary = min(
         (float(row.get("secondary_wer", 1.0)) for row in attempts), default=1.0
     )
     if primary > 0.01 or secondary > 0.01:
-        categories.append("lexical_or_pronunciation")
+        categories.append(
+            "spoken_form" if "spoken_form" in explicit else "lexical_or_pronunciation"
+        )
         signals.append(
             {"kind": "dual_asr", "primary_wer": primary, "secondary_wer": secondary}
         )
@@ -153,7 +187,18 @@ def _diagnose_unit(
     if "unexpected_silence" in acoustic:
         categories.append("pause_realization")
     if {"abnormal_duration", "long_word_duration_risk"} & set(acoustic):
-        categories.append("elongation_or_pace")
+        categories.append(
+            "semantic_bridge_duration"
+            if any(
+                row.get("semantic_role") == "low_information_narrative_bridge"
+                for row in attempts
+            )
+            else "elongation_or_pace"
+        )
+    if any(row.get("terminal_vowel_overhold") for row in attempts):
+        categories.append("terse_terminal_overhold")
+    if any(row.get("sentence_role") == "genuine_question_rise" for row in attempts):
+        categories.append("question_intonation")
     if acoustic:
         signals.append({"kind": "acoustic", "failures": acoustic})
     pace_values = [
@@ -176,8 +221,16 @@ def _diagnose_unit(
             categories.append("elongation_or_pace")
     if not categories:
         categories.append("candidate_quality_ambiguous")
-    if "lexical_or_pronunciation" in categories:
+    if "spoken_form" in categories:
+        strategy = "phrase_aware_spoken_form"
+    elif "lexical_or_pronunciation" in categories:
         strategy = "reviewed_pronunciation_repair"
+    elif "semantic_bridge_duration" in categories:
+        strategy = "semantic_bridge_resynthesis"
+    elif "terse_terminal_overhold" in categories:
+        strategy = "contextual_terminal_resynthesis"
+    elif "question_intonation" in categories:
+        strategy = "performance_plan_variant"
     elif "pause_realization" in categories and "elongation_or_pace" not in categories:
         strategy = "performance_plan_variant"
     elif "elongation_or_pace" in categories:
@@ -286,27 +339,45 @@ def append_repair_outcome(project: Path, outcome: RepairOutcome) -> Path:
     return path
 
 
-def strategy_priors(project: Path, defect: str) -> list[str]:
+def strategy_priors(
+    project: Path,
+    defect: str,
+    *,
+    context: str | None = None,
+    minimum_samples: int = 5,
+) -> list[str]:
     """Rank historically accepted strategies without changing gate authority."""
 
     path = project / "production/repair-outcomes.jsonl"
-    counts: dict[str, int] = {}
+    attempts: dict[str, int] = {}
+    accepted: dict[str, int] = {}
     if path.is_file():
         for line in path.read_text(encoding="utf-8").splitlines():
             try:
                 row = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            strategy = row.get("accepted_strategy")
-            if (
-                row.get("defect") == defect
-                and strategy
-                and row.get("listener_result") == "accepted"
+            if row.get("defect") != defect or (
+                context is not None and row.get("context") != context
             ):
-                counts[str(strategy)] = counts.get(str(strategy), 0) + 1
+                continue
+            for strategy in row.get("strategies_attempted", []):
+                value = str(strategy)
+                attempts[value] = attempts.get(value, 0) + 1
+            strategy = row.get("accepted_strategy")
+            if strategy and row.get("listener_result") == "accepted":
+                value = str(strategy)
+                accepted[value] = accepted.get(value, 0) + 1
     return [
         key
-        for key, _value in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        for key in sorted(
+            (key for key, count in attempts.items() if count >= minimum_samples),
+            key=lambda key: (
+                -((accepted.get(key, 0) + 1) / (attempts[key] + 2)),
+                -attempts[key],
+                key,
+            ),
+        )
     ]
 
 

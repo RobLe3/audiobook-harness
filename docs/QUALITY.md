@@ -1,6 +1,6 @@
 # Quality contract
 
-This document describes Audiobook Harness **0.4.12**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.4.13**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 ## Transactional quality authority
 
@@ -193,3 +193,22 @@ reason to download a model during production, and no advisory score has release
 authority. Listener decisions are stored as compact repair outcomes. Historical
 success can reorder otherwise eligible strategies, but cannot relax WER,
 alignment, pronunciation, acoustic, or perceptual-review gates.
+
+`candidate-strategy-ledger.json` reserves coverage for every applicable repair
+family. Repeating speed or punctuation variants cannot exhaust a cue while a
+declared contextual, reviewed-pronunciation, spoken-form, or semantic family is
+still untried. A family that cannot produce a distinct waveform records the
+reason instead of silently consuming its slot.
+
+`effective-cue-state.json` is the cue-local handoff authority. It records the
+selected waveform as provisional until candidate verification and all
+downstream pronunciation, duration, pause, energy, and expressive gates agree.
+Review and continuation tooling consumes this reconciled state instead of
+independently interpreting individual reports.
+
+Mild duration corrections may be rendered as optional review candidates when
+the affected word is MFA-bounded, explicitly eligible, not prominence
+protected, and needs no more than 12 percent compression. The harness preserves
+the surrounding audio, fingerprints the external offline tool, and retains
+human perceptual review as the acceptance authority. Larger corrections use
+contextual synthesis or semantic re-chunking.
