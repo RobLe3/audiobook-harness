@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 from pathlib import Path
 
 from . import __version__
@@ -41,6 +42,38 @@ from .migration import apply_upgrade, upgrade_plan
 from .versioning import compatibility_receipt
 
 REPO = Path(__file__).resolve().parents[2]
+
+
+EXIT_CODES = {
+    "input": 2,
+    "environment": 3,
+    "quality": 4,
+    "integrity": 5,
+    "review": 6,
+    "processing": 7,
+    "invariant": 8,
+}
+
+
+def exit_code_for_error(error: BaseException) -> int:
+    """Map failures to stable operator-facing exit categories."""
+    if isinstance(error, (FileNotFoundError, PermissionError)):
+        return EXIT_CODES["environment"]
+    if isinstance(error, PhaseExecutionError):
+        if error.result.status == "repairable_failure":
+            return EXIT_CODES["quality"]
+        return EXIT_CODES["processing"]
+    if isinstance(error, (ValueError, TypeError)):
+        return EXIT_CODES["input"]
+    if isinstance(error, RuntimeError):
+        message = str(error).casefold()
+        if "review" in message or "approval" in message:
+            return EXIT_CODES["review"]
+        if "hash" in message or "integrity" in message or "manifest" in message:
+            return EXIT_CODES["integrity"]
+        if "phase" in message or "invariant" in message:
+            return EXIT_CODES["invariant"]
+    return EXIT_CODES["processing"]
 
 
 def emit(value: object) -> None:
@@ -453,7 +486,7 @@ def produce(
         )
 
 
-def main() -> None:
+def _main() -> None:
     parser = argparse.ArgumentParser(prog="audiobook-harness")
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -626,6 +659,28 @@ def main() -> None:
     # Center repair or another CLI invocation and overwrite receipts/media.
     with project_writer_lock(project):
         emit(_run(project, args.command, actions[args.command]))
+
+
+def main() -> None:
+    """Run the CLI and emit structured, privacy-safe failure diagnostics."""
+    try:
+        _main()
+    except Exception as error:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": {
+                        "type": type(error).__name__,
+                        "message": str(error),
+                        "exit_code": exit_code_for_error(error),
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            file=sys.stderr,
+        )
+        raise SystemExit(exit_code_for_error(error)) from error
 
 
 if __name__ == "__main__":

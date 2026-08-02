@@ -57,3 +57,23 @@ def test_atomic_receipt_write_preserves_previous_document_on_replace_failure(
     with pytest.raises(OSError, match="simulated interruption"):
         write_operation(path, current)
     assert read_operation(path) == previous
+
+
+def test_atomic_receipt_write_cleans_temporary_file_on_fsync_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    path = tmp_path / "operation.json"
+    previous = new_operation(kind="repair", input_identity="old", payload={})
+    write_operation(path, previous)
+    original_fsync = project_module.os.fsync
+
+    def fail_fsync(fd: int) -> None:
+        raise OSError("simulated fsync interruption")
+
+    monkeypatch.setattr(project_module.os, "fsync", fail_fsync)
+    current = new_operation(kind="repair", input_identity="new", payload={})
+    with pytest.raises(OSError, match="fsync interruption"):
+        write_operation(path, current)
+    assert read_operation(path) == previous
+    assert not list(path.parent.glob(f".{path.name}.*.tmp"))
+    monkeypatch.setattr(project_module.os, "fsync", original_fsync)

@@ -74,6 +74,11 @@ For manual control, use:
 
 ## What “blocked” means
 
+CLI failures use stable categories: `2` input, `3` environment, `4` quality,
+`5` integrity, `6` review required, `7` processing, and `8` invariant failure.
+Failures also emit a compact JSON diagnostic on stderr with the error type,
+message, and exit code; manuscript text and audio bytes are not included.
+
 A block is a safety feature, not an invitation to bypass a check.
 
 | Block | Meaning | Correct action |
