@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.8
+
+- Add an HTTP regression test proving the Review Center rejects a review-draft
+  write with HTTP 409 while production owns the project writer lock.
+
 ## 0.5.7
 
 - Place all review-state mutations behind the project single-writer lock,
