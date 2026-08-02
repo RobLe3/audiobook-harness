@@ -16,6 +16,16 @@ assets.
 The explicit setup script remains the supported path for installing optional
 local models and external tools.
 
+To verify a clean, model-free end-to-end onboarding path, run:
+
+```bash
+python scripts/run-fixture.py
+```
+
+The fixture uses only the original text under `templates/project`, writes to a
+temporary directory, and performs analysis without downloading models or
+contacting a network.
+
 `python scripts/setup.py --interactive` asks before installing system packages,
 the optional ASR verification stack plus pinned model weights, or MFA. The core
 package supports project creation and analysis without installing Whisper/PyTorch;
