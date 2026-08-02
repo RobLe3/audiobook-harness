@@ -293,9 +293,7 @@ def test_staging_failure_restores_previous_owned_directory(
     (target / STAGE_MARKER).write_text(json.dumps({"project": str(project.resolve())}))
     (target / "previous.txt").write_text("known-good")
 
-    monkeypatch.setattr(
-        tts, "_stage_into", lambda _project, _output, **_kwargs: {}
-    )
+    monkeypatch.setattr(tts, "_stage_into", lambda _project, _output, **_kwargs: {})
 
     original_replace = Path.replace
 
