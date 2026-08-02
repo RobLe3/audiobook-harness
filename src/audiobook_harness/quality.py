@@ -26,7 +26,7 @@ from .pronunciation import (
 from .selection_integrity import audit_candidate_selection
 from .advisory_quality import collect_advisory_scores
 from .repair_analysis import build_repair_artifacts
-from .quality_policy import classify_quality_report
+from .quality_policy import ACOUSTIC_THRESHOLDS, classify_quality_report
 from .asr_cache import evidence_key, load as load_asr_cache, save as save_asr_cache
 from .performance import resolve_profile
 
@@ -397,24 +397,33 @@ def _acoustic_checks(mono: np.ndarray, rate: int, words: int) -> list[str]:
     failures: list[str] = []
     if not len(mono):
         return ["empty_audio"]
-    if float(np.max(np.abs(mono))) >= 0.995:
+    if float(np.max(np.abs(mono))) >= ACOUSTIC_THRESHOLDS["clipping_peak"]:
         failures.append("clipping")
     duration = len(mono) / max(1, rate)
-    if duration < 0.15 or duration > max(2.0, words * 1.25):
+    if duration < ACOUSTIC_THRESHOLDS["minimum_duration_seconds"] or duration > max(
+        ACOUSTIC_THRESHOLDS["maximum_duration_seconds_floor"],
+        words * ACOUSTIC_THRESHOLDS["maximum_duration_seconds_per_word"],
+    ):
         failures.append("abnormal_duration")
-    if words and duration / words > 1.6:
+    if (
+        words
+        and duration / words > ACOUSTIC_THRESHOLDS["maximum_word_duration_seconds"]
+    ):
         failures.append("long_word_duration_risk")
-    frame = max(1, int(rate * 0.02))
+    frame = max(1, int(rate * ACOUSTIC_THRESHOLDS["silence_frame_seconds"]))
     usable = mono[: len(mono) - len(mono) % frame]
     if len(usable):
         quiet = np.sqrt(
             np.mean(usable.reshape(-1, frame) ** 2, axis=1) + 1e-12
-        ) < 10 ** (-55 / 20)
+        ) < 10 ** (ACOUSTIC_THRESHOLDS["silence_rms_dbfs"] / 20)
         longest = current = 0
         for value in quiet:
             current = current + 1 if value else 0
             longest = max(longest, current)
-        if longest * frame / rate > 2.0:
+        if (
+            longest * frame / rate
+            > ACOUSTIC_THRESHOLDS["maximum_internal_silence_seconds"]
+        ):
             failures.append("unexpected_silence")
     return failures
 

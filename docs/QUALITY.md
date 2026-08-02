@@ -1,11 +1,15 @@
 # Quality contract
 
-This document describes Audiobook Harness **0.5.5**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.5.6**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 ## Transactional quality authority
 
-Objective policy outcomes are versioned (`POLICY_VERSION = 1`) and have a
-stable `policy_identity_sha256` in every result. They have fixed
+Objective policy outcomes are versioned (`POLICY_VERSION = 2`) and have a
+stable `policy_identity_sha256` in every result. The policy also owns the
+acoustic thresholds used for clipping, duration, word-duration, frame, and
+silence checks, so changing one changes cue-QA identity and invalidates its
+downstream evidence. The harness ships a small CC0/original, model-free corpus
+that repeats deterministic text and signal cases for these dispositions. They have fixed
 meanings: `pass` means every required objective gate passed; `automatic_repair`
 means bounded failed units have evidence for another strategy; `review_required`
 means pronunciation or other evidence is incomplete or ambiguous; and `blocked`

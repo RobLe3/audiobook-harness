@@ -8,7 +8,17 @@ from enum import StrEnum
 from typing import Any
 
 
-POLICY_VERSION = 1
+POLICY_VERSION = 2
+ACOUSTIC_THRESHOLDS = {
+    "clipping_peak": 0.995,
+    "minimum_duration_seconds": 0.15,
+    "maximum_duration_seconds_floor": 2.0,
+    "maximum_duration_seconds_per_word": 1.25,
+    "maximum_word_duration_seconds": 1.6,
+    "silence_frame_seconds": 0.02,
+    "silence_rms_dbfs": -55.0,
+    "maximum_internal_silence_seconds": 2.0,
+}
 POLICY_CONTRACT = {
     "version": POLICY_VERSION,
     "precedence": (
@@ -20,6 +30,7 @@ POLICY_CONTRACT = {
         "objective_pass",
         "incomplete_or_ambiguous_review",
     ),
+    "acoustic_thresholds": ACOUSTIC_THRESHOLDS,
     "subjective_listener_authority": "never_automatic",
 }
 

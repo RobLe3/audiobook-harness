@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.6
+
+- Move acoustic quality thresholds into the versioned, hash-bound quality
+  policy contract.
+- Expand the CC0/original model-free quality corpus with deterministic signal
+  references for clipping, duration, silence, long-word timing, and noise.
+
 ## 0.5.5
 
 - Add process-level regressions proving direct stage and promotion commands

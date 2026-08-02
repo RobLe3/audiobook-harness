@@ -1,7 +1,7 @@
 {
   "version": 1,
   "license": "CC0-1.0",
-  "purpose": "Small original, text-only quality-policy regression corpus.",
+  "purpose": "Small original, model-free quality-policy and acoustic regression corpus.",
   "cases": [
     {"id": "exact-pass", "category": "text", "input": "The signal is clear.", "expected": "pass"},
     {"id": "skipped-word", "category": "transcription", "input": "The signal is clear.", "evidence": {"failures": ["u1"]}, "expected": "automatic_repair"},
@@ -14,5 +14,55 @@
     {"id": "encoded-deliverable-invalid", "category": "encoding", "input": "The signal is clear.", "evidence": {"encoding": {"ok": false}}, "expected": "blocked"},
     {"id": "metadata-invalid", "category": "metadata", "input": "The signal is clear.", "evidence": {"encoding": {"ok": false}}, "expected": "blocked"},
     {"id": "non-repairable-acoustic-defect", "category": "acoustics", "input": "The signal is clear.", "evidence": {"acoustic": {"ok": false, "repairable": false}}, "expected": "blocked"}
+  ],
+  "signal_cases": [
+    {
+      "id": "clean-reference-tone",
+      "category": "acoustics",
+      "sample_rate": 1000,
+      "words": 1,
+      "signal": {"kind": "constant", "duration_seconds": 1.0, "amplitude": 0.1},
+      "expected_acoustic_failures": []
+    },
+    {
+      "id": "clipping-reference",
+      "category": "acoustics",
+      "sample_rate": 1000,
+      "words": 1,
+      "signal": {"kind": "spike", "duration_seconds": 1.0, "amplitude": 0.1, "spike_amplitude": 1.0},
+      "expected_acoustic_failures": ["clipping"]
+    },
+    {
+      "id": "short-duration-reference",
+      "category": "timing",
+      "sample_rate": 1000,
+      "words": 1,
+      "signal": {"kind": "constant", "duration_seconds": 0.1, "amplitude": 0.1},
+      "expected_acoustic_failures": ["abnormal_duration"]
+    },
+    {
+      "id": "long-word-reference",
+      "category": "timing",
+      "sample_rate": 1000,
+      "words": 1,
+      "signal": {"kind": "constant", "duration_seconds": 2.0, "amplitude": 0.1},
+      "expected_acoustic_failures": ["long_word_duration_risk"]
+    },
+    {
+      "id": "internal-silence-reference",
+      "category": "silence",
+      "sample_rate": 1000,
+      "words": 2,
+      "signal": {"kind": "silence", "duration_seconds": 2.1},
+      "expected_acoustic_failures": ["unexpected_silence"]
+    },
+    {
+      "id": "deterministic-noise-reference",
+      "category": "noise",
+      "sample_rate": 1000,
+      "words": 1,
+      "signal": {"kind": "noise", "duration_seconds": 1.0, "amplitude": 0.02, "seed": 7},
+      "expected_acoustic_failures": []
+    }
   ]
 }
