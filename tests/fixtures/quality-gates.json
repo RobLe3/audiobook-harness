@@ -6,6 +6,8 @@
     {"id": "exact-pass", "input": "The signal is clear.", "expected": "pass"},
     {"id": "skipped-word", "input": "The signal is clear.", "evidence": {"failures": ["u1"]}, "expected": "automatic_repair"},
     {"id": "reviewed-term-missing", "input": "The signal is clear.", "evidence": {"lexicon": {"ok": false}}, "expected": "review_required"},
-    {"id": "alignment-missing", "input": "The signal is clear.", "evidence": {"lexicon": {"ok": true}, "forced_alignment": {"ok": false}}, "expected": "blocked"}
+    {"id": "alignment-missing", "input": "The signal is clear.", "evidence": {"lexicon": {"ok": true}, "forced_alignment": {"ok": false}}, "expected": "blocked"},
+    {"id": "encoded-deliverable-invalid", "input": "The signal is clear.", "evidence": {"encoding": {"ok": false}}, "expected": "blocked"},
+    {"id": "non-repairable-acoustic-defect", "input": "The signal is clear.", "evidence": {"acoustic": {"ok": false, "repairable": false}}, "expected": "blocked"}
   ]
 }

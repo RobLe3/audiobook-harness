@@ -39,6 +39,18 @@ def test_quality_policy_blocks_missing_alignment():
     assert result["disposition"] == "blocked"
 
 
+def test_quality_policy_blocks_invalid_encoded_deliverable():
+    result = classify_quality_report({"ok": False, "encoding": {"ok": False}})
+    assert result["disposition"] == "blocked"
+
+
+def test_quality_policy_blocks_non_repairable_acoustic_defect():
+    result = classify_quality_report(
+        {"ok": False, "acoustic": {"ok": False, "repairable": False}}
+    )
+    assert result["disposition"] == "blocked"
+
+
 def test_public_quality_fixture_corpus_matches_policy():
     path = Path(__file__).parent / "fixtures/quality-gates.json"
     corpus = json.loads(path.read_text(encoding="utf-8"))

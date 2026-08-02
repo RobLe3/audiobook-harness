@@ -4,6 +4,14 @@ This document describes Audiobook Harness **0.5.1**. Product versioning and arti
 
 ## Transactional quality authority
 
+Objective policy outcomes are versioned (`POLICY_VERSION = 1`) and have fixed
+meanings: `pass` means every required objective gate passed; `automatic_repair`
+means bounded failed units have evidence for another strategy; `review_required`
+means pronunciation or other evidence is incomplete or ambiguous; and `blocked`
+means required alignment, encoded-deliverable, or explicitly non-repairable
+acoustic evidence is invalid. These dispositions never convert subjective
+listener decisions into an objective score.
+
 Each production phase owns an explicit set of artifacts and JSON success
 predicates. The harness writes the phase receipt only after every artifact is
 present, every predicate is true, and the phase-specific input identity is

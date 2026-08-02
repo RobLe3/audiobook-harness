@@ -21,6 +21,8 @@ def classify_quality_report(report: dict[str, Any]) -> dict[str, Any]:
     failures = [str(value) for value in report.get("failures", [])]
     lexicon = report.get("lexicon")
     alignment = report.get("forced_alignment")
+    acoustic = report.get("acoustic")
+    encoding = report.get("encoding")
     if report.get("ok") is True:
         disposition = QualityDisposition.PASS
         reason = "all objective quality gates passed"
@@ -32,6 +34,16 @@ def classify_quality_report(report: dict[str, Any]) -> dict[str, Any]:
     ):
         disposition = QualityDisposition.BLOCKED
         reason = "forced-alignment evidence is unavailable or invalid"
+    elif isinstance(encoding, dict) and not encoding.get("ok", False):
+        disposition = QualityDisposition.BLOCKED
+        reason = "encoded-deliverable evidence is unavailable or invalid"
+    elif (
+        isinstance(acoustic, dict)
+        and not acoustic.get("ok", False)
+        and acoustic.get("repairable") is False
+    ):
+        disposition = QualityDisposition.BLOCKED
+        reason = "acoustic evidence identifies a non-repairable release defect"
     elif failures:
         disposition = QualityDisposition.AUTOMATIC_REPAIR
         reason = "failed units have candidate evidence for bounded repair"
