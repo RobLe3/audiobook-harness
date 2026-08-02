@@ -614,14 +614,21 @@ def _main() -> None:
         serve_review(project, args.host, args.port)
         return
     if args.command == "finalize-review":
-        value = json.loads(args.decisions.read_text(encoding="utf-8"))
-        emit(finalize_review(project, value.get("decisions", value)))
+        # A review decision becomes input to repair planning, so it shares the
+        # same project writer boundary as production.  Read it only after the
+        # lock is held: a competing production run must fail before it can
+        # observe or mutate review state.
+        with project_writer_lock(project):
+            value = json.loads(args.decisions.read_text(encoding="utf-8"))
+            emit(finalize_review(project, value.get("decisions", value)))
         return
     if args.command == "compile-feedback":
-        emit(compile_feedback(project))
+        with project_writer_lock(project):
+            emit(compile_feedback(project))
         return
     if args.command == "promote-feedback":
-        emit(promote_rule(project, args.rule_id))
+        with project_writer_lock(project):
+            emit(promote_rule(project, args.rule_id))
         return
     if args.command == "feature-parity":
         emit(feature_parity(project))

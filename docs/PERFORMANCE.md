@@ -1,6 +1,6 @@
 # Planning time and performance
 
-This document describes Audiobook Harness **0.5.6**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.5.7**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 ## Read this first
 

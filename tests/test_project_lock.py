@@ -66,17 +66,33 @@ def test_project_writer_lock_rejects_a_second_process(tmp_path: Path):
     assert "locked" in result.stderr.lower()
 
 
-@pytest.mark.parametrize("command", ("stage", "promote"))
-def test_live_production_writer_blocks_direct_packaging_commands(
-    tmp_path: Path, command: str
+@pytest.mark.parametrize(
+    "command,extra_args",
+    (
+        ("stage", ()),
+        ("promote", ()),
+        ("compile-feedback", ()),
+        ("promote-feedback", ("rule-id",)),
+        ("finalize-review", ("missing-decisions.json",)),
+    ),
+)
+def test_live_production_writer_blocks_direct_mutating_commands(
+    tmp_path: Path, command: str, extra_args: tuple[str, ...]
 ):
-    """A packaging command must fail before it can inspect or mutate media."""
+    """Every direct state mutation fails before reading or writing project state."""
     template = Path(__file__).parents[1] / "templates/project"
     project = tmp_path / "book"
     scaffold(project, template)
     with project_writer_lock(project):
         result = subprocess.run(
-            [sys.executable, "-m", "audiobook_harness.cli", command, str(project)],
+            [
+                sys.executable,
+                "-m",
+                "audiobook_harness.cli",
+                command,
+                str(project),
+                *extra_args,
+            ],
             capture_output=True,
             text=True,
         )

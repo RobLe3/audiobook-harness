@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.7
+
+- Place all review-state mutations behind the project single-writer lock,
+  including direct feedback commands and both Review Center server variants.
+- Return a clear conflict response when a live production writer owns the
+  project, preserving the existing review data for a later retry.
+
 ## 0.5.6
 
 - Move acoustic quality thresholds into the versioned, hash-bound quality

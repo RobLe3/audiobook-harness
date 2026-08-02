@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import quote, unquote, urlparse
 
 from .project import load_project, write_json
+from .project_lock import project_writer_lock
 from .review import build_review, finalize_review, review_status, validate_decisions
 
 
@@ -365,19 +366,26 @@ def create_review_center_server(
             try:
                 value = _json_body(self)
                 decisions = validate_decisions(list(value.get("decisions", [])))
-                manifest = json.loads(
-                    (project.root / "production/review-manifest.json").read_text()
-                )
-                write_json(
-                    project.root / "production/review-draft.json",
-                    {
-                        "version": 2,
-                        "review_identity_sha256": manifest["review_identity_sha256"],
-                        "decisions": decisions,
-                        "saved": True,
-                    },
-                )
+                # A draft is authoritative input to later review processing.
+                # It must never race generation, repair, or a CLI mutation.
+                with project_writer_lock(project.root):
+                    manifest = json.loads(
+                        (project.root / "production/review-manifest.json").read_text()
+                    )
+                    write_json(
+                        project.root / "production/review-draft.json",
+                        {
+                            "version": 2,
+                            "review_identity_sha256": manifest[
+                                "review_identity_sha256"
+                            ],
+                            "decisions": decisions,
+                            "saved": True,
+                        },
+                    )
                 _send_json(self, {"ok": True})
+            except RuntimeError as error:
+                _send_json(self, {"ok": False, "error": str(error)}, 409)
             except (ValueError, OSError, json.JSONDecodeError) as error:
                 _send_json(self, {"ok": False, "error": str(error)}, 400)
 
@@ -399,12 +407,16 @@ def create_review_center_server(
                 _send_json(self, {"ok": False, "error": "invalid review session"}, 403)
                 return
             try:
-                _send_json(
-                    self,
-                    finalize_review(
+                # Finalization writes decisions, observations, feedback, and a
+                # processing receipt.  Keep that transaction behind the same
+                # single-writer lock as direct CLI production operations.
+                with project_writer_lock(project.root):
+                    report = finalize_review(
                         project.root, list(_json_body(self).get("decisions", []))
-                    ),
-                )
+                    )
+                _send_json(self, report)
+            except RuntimeError as error:
+                _send_json(self, {"ok": False, "error": str(error)}, 409)
             except (ValueError, OSError, json.JSONDecodeError) as error:
                 _send_json(self, {"ok": False, "error": str(error)}, 400)
 

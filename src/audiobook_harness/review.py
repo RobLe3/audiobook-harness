@@ -15,6 +15,7 @@ from .convergence import convergence_summary
 from .feedback import append_observations, compile_feedback, validate_decisions
 from .parity import project_profile_identity
 from .project import write_json
+from .project_lock import project_writer_lock
 from .repair_analysis import RepairOutcome, append_repair_outcome
 from .status import asr_activity, owner_activity
 
@@ -792,17 +793,20 @@ refreshStatus();setInterval(refreshStatus,5000);
             try:
                 value = self._json_body()
                 decisions = validate_decisions(list(value.get("decisions", [])))
-                manifest = json.loads(
-                    (project / "production/review-manifest.json").read_text()
-                )
-                report = {
-                    "version": 2,
-                    "review_identity_sha256": manifest["review_identity_sha256"],
-                    "decisions": decisions,
-                    "saved": True,
-                }
-                write_json(project / "production/review-draft.json", report)
+                with project_writer_lock(project):
+                    manifest = json.loads(
+                        (project / "production/review-manifest.json").read_text()
+                    )
+                    report = {
+                        "version": 2,
+                        "review_identity_sha256": manifest["review_identity_sha256"],
+                        "decisions": decisions,
+                        "saved": True,
+                    }
+                    write_json(project / "production/review-draft.json", report)
                 self._respond(200, {"ok": True})
+            except RuntimeError as error:
+                self._respond(409, {"ok": False, "error": str(error)})
             except (ValueError, json.JSONDecodeError, OSError) as error:
                 self._respond(400, {"ok": False, "error": str(error)})
 
@@ -815,8 +819,11 @@ refreshStatus();setInterval(refreshStatus,5000);
                 return
             try:
                 value = self._json_body()
-                report = finalize_review(project, list(value.get("decisions", [])))
+                with project_writer_lock(project):
+                    report = finalize_review(project, list(value.get("decisions", [])))
                 self._respond(200, report)
+            except RuntimeError as error:
+                self._respond(409, {"ok": False, "error": str(error)})
             except (ValueError, json.JSONDecodeError, OSError) as error:
                 self._respond(400, {"ok": False, "error": str(error)})
 
