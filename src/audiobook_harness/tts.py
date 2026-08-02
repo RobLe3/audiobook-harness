@@ -613,14 +613,7 @@ def _prepare_stage_directory(project: Path, output: Path | None) -> Path:
     if root.exists():
         children = list(root.iterdir())
         if children:
-            try:
-                ownership = json.loads(marker.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                raise RuntimeError(
-                    "Refusing to replace a non-empty directory not owned by Audiobook Harness"
-                ) from None
-            if ownership.get("project") != str(project):
-                raise RuntimeError("Staging directory belongs to a different project")
+            _require_owned_stage_directory(root, project)
             shutil.rmtree(root)
     root.mkdir(parents=True, exist_ok=True)
     write_json(
@@ -642,6 +635,23 @@ def _require_non_symlink_stage_path(path: Path) -> None:
     absolute = path.absolute()
     if any(component.is_symlink() for component in (absolute, *absolute.parents)):
         raise RuntimeError("Cannot stage into a symbolic link path")
+
+
+def _require_owned_stage_directory(root: Path, project: Path) -> None:
+    """Validate direct ownership metadata before a staging cleanup or swap."""
+    marker = root / STAGE_MARKER
+    if marker.is_symlink() or not marker.is_file():
+        raise RuntimeError(
+            "Refusing to replace a non-empty directory not owned by Audiobook Harness"
+        )
+    try:
+        ownership = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raise RuntimeError(
+            "Refusing to replace a non-empty directory not owned by Audiobook Harness"
+        ) from None
+    if ownership.get("project") != str(project.resolve()):
+        raise RuntimeError("Staging directory belongs to a different project")
 
 
 def _stage_into(
@@ -805,18 +815,8 @@ def stage(
     try:
         if target.exists():
             children = list(target.iterdir())
-            marker = target / STAGE_MARKER
             if children:
-                try:
-                    ownership = json.loads(marker.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError):
-                    raise RuntimeError(
-                        "Refusing to replace a non-empty directory not owned by Audiobook Harness"
-                    ) from None
-                if ownership.get("project") != str(project.resolve()):
-                    raise RuntimeError(
-                        "Staging directory belongs to a different project"
-                    )
+                _require_owned_stage_directory(target, project)
             target.replace(backup)
         temporary.replace(target)
         shutil.rmtree(backup, ignore_errors=True)

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.4
+
+- Extend transaction fault-injection coverage to status/event persistence,
+  storage exhaustion, permission failures, and symbolic-link ownership metadata.
+- Make a phase-start event failure fail closed through the typed transactional
+  path instead of escaping before rollback handling.
+- Document the supported single-writer and direct-local-filesystem contract.
+
 ## 0.5.3
 
 - Add issue-scoped, offline verification profiles and a public closure-evidence

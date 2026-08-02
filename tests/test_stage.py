@@ -1,4 +1,5 @@
 import json
+import errno
 import shutil
 import subprocess
 import sys
@@ -154,7 +155,7 @@ def _verified_stage(
     (project / "production/stage-manifest.json").write_text(json.dumps(manifest))
     review = build_review(project, stage)
     assert review["version"] == 3
-    assert review["audiobook_harness_version"] == "0.5.3"
+    assert review["audiobook_harness_version"] == "0.5.4"
     finalize_review(
         project, [{"id": row["id"], "decision": "approve"} for row in review["items"]]
     )
@@ -296,6 +297,34 @@ def test_promotion_copy_failure_restores_previous_release(
     assert not (project / "deliverables.next").exists()
 
 
+@pytest.mark.parametrize(
+    "error",
+    [
+        PermissionError("simulated permission denied"),
+        OSError(errno.ENOSPC, "disk full"),
+    ],
+)
+def test_promotion_copy_storage_failures_restore_previous_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: OSError
+):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    _verified_stage(project, monkeypatch)
+    deliverables = project / "deliverables"
+    deliverables.mkdir()
+    (deliverables / "previous.m4a").write_text("known-good")
+
+    def fail_copy(*_args: object, **_kwargs: object) -> None:
+        raise error
+
+    monkeypatch.setattr(tts.shutil, "copy2", fail_copy)
+    with pytest.raises(type(error)):
+        promote(project)
+    assert (deliverables / "previous.m4a").read_text() == "known-good"
+    assert not (project / "deliverables.next").exists()
+
+
 def test_staging_refuses_unrelated_nonempty_and_dangerous_directories(tmp_path: Path):
     template = Path(__file__).parents[1] / "templates/project"
     project = tmp_path / "book"
@@ -322,6 +351,22 @@ def test_staging_refuses_a_symbolic_linked_output_path(tmp_path: Path):
     with pytest.raises(RuntimeError, match="symbolic link"):
         tts.stage(project, linked)
     assert list(target.iterdir()) == []
+
+
+def test_staging_refuses_a_symbolic_linked_ownership_marker(tmp_path: Path):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    stage = project / "staging"
+    stage.mkdir()
+    outside = tmp_path / "outside-marker.json"
+    outside.write_text(json.dumps({"project": str(project.resolve())}))
+    (stage / STAGE_MARKER).symlink_to(outside)
+
+    with pytest.raises(RuntimeError, match="not owned"):
+        _prepare_stage_directory(project, stage)
+    assert outside.is_file()
+    assert (stage / STAGE_MARKER).is_symlink()
 
 
 def test_staging_replaces_only_same_project_owned_directory(tmp_path: Path):

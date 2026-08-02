@@ -1,18 +1,20 @@
 # Versioning and legacy compatibility
 
-Audiobook Harness **0.5.3** is the current product release. It adds
-issue-scoped local verification profiles, receipt-last status persistence, and
-symbolic-link rejection for destructive staging and promotion paths. The
-existing strategy-coverage candidate scheduling, reconciled cue-evidence state,
-bounded optional span-duration repair, context-stratified listener-outcome
-learning, and series-wide outstanding-work reconciler remain in force. The
+Audiobook Harness **0.5.4** is the current product release. It adds
+fault-injection coverage for durable phase diagnostics and storage failures,
+and documents the direct-local-filesystem, single-writer production contract.
+The existing issue-scoped verification profiles, receipt-last status
+persistence, symbolic-link rejection, strategy-coverage candidate scheduling,
+reconciled cue-evidence state, bounded optional span-duration repair,
+context-stratified listener-outcome learning, and series-wide outstanding-work
+reconciler remain in force. The
 eight-phase transactional executor, immutable take/render lineage,
 item-scoped decisions, codec-aware tail validation, phase-scoped continuation,
 and strict hash-bound verification remain mandatory.
 Product releases use SemVer and are independent of report-schema integers,
 dependency versions, and local model or asset revisions.
 
-The supported maturity claim for 0.5.3 is controlled maintainer-operated local
+The supported maturity claim for 0.5.4 is controlled maintainer-operated local
 production. Unattended production, multi-user coordination, stable public API
 compatibility, and third-party operational support remain future goals rather
 than promises of this release.
@@ -20,7 +22,7 @@ than promises of this release.
 Project-specific audiobook names and historic build labels are not harness product releases.
 Historical pre-SemVer project artifacts remain immutable and reusable through
 their hashes, but their former project-local labels are not exposed as current
-product versions. New reports identify the product as `0.5.3` and bind the
+product versions. New reports identify the product as `0.5.4` and bind the
 project configuration through `project_profile_sha256`.
 
 Run `audiobook-harness compatibility-audit PROJECT` to inspect a receipt without writing it. Add `--apply` to store `production/version-compatibility-receipt.json`. The receipt hashes existing analysis, candidate, verification, and alignment evidence without rewriting those artifacts or their historical receipts. Missing or changed evidence is never silently accepted.

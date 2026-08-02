@@ -1,3 +1,4 @@
+import errno
 import json
 from pathlib import Path
 
@@ -129,6 +130,31 @@ def test_status_write_failure_cannot_leave_a_success_receipt(
     assert json.loads((production / "phase-result.json").read_text())["status"] == (
         "implementation_failure"
     )
+
+
+def test_event_write_failure_cannot_leave_a_success_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    production = tmp_path / "production"
+    production.mkdir()
+    artifact = production / "owned.json"
+    artifact.write_text('{"version":"approved"}')
+    phase = Phase(2, "test", (1,), ("owned.json",))
+
+    def fail_event(*_args: object, **_kwargs: object) -> None:
+        raise OSError(errno.ENOSPC, "simulated journal disk full")
+
+    monkeypatch.setattr(phase_engine, "append_event", fail_event)
+    with pytest.raises(PhaseExecutionError) as raised:
+        execute_phase(
+            tmp_path,
+            phase=phase,
+            input_identity="new",
+            action=lambda: artifact.write_text('{"version":"partial"}'),
+        )
+    assert raised.value.result.status == "implementation_failure"
+    assert json.loads(artifact.read_text()) == {"version": "approved"}
+    assert not (production / "phase-receipts/step-2.json").exists()
 
 
 def test_failure_classification_is_typed() -> None:

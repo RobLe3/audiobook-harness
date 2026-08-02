@@ -177,16 +177,16 @@ def execute_phase(
             existed[path] = backup
     invalidate_phase_receipts_from(project, step=phase.number)
     journal = production / "phase-events.jsonl"
-    append_event(
-        journal,
-        {
-            "event": "phase_started",
-            "phase": phase.number,
-            "name": phase.name,
-            "input_identity": input_identity,
-        },
-    )
     try:
+        append_event(
+            journal,
+            {
+                "event": "phase_started",
+                "phase": phase.number,
+                "name": phase.name,
+                "input_identity": input_identity,
+            },
+        )
         value = action()
         _validate_outputs(project, phase)
         result = PhaseResult(

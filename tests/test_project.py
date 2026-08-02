@@ -1,4 +1,5 @@
 import json
+import errno
 from pathlib import Path
 
 import pytest
@@ -51,6 +52,28 @@ def test_write_json_replace_failure_preserves_previous_complete_document(
 
     monkeypatch.setattr(project_module.os, "replace", fail_replace)
     with pytest.raises(OSError, match="disk interruption"):
+        write_json(path, {"state": "partial"})
+    assert json.loads(path.read_text()) == {"state": "approved"}
+    assert list(path.parent.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_write_json_sync_failure_preserves_previous_complete_document(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    path = tmp_path / "production" / "state.json"
+    write_json(path, {"state": "approved"})
+    original_fsync = project_module.os.fsync
+    calls = 0
+
+    def fail_first_sync(descriptor: int) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError(errno.ENOSPC, "simulated disk full")
+        original_fsync(descriptor)
+
+    monkeypatch.setattr(project_module.os, "fsync", fail_first_sync)
+    with pytest.raises(OSError, match="disk full"):
         write_json(path, {"state": "partial"})
     assert json.loads(path.read_text()) == {"state": "approved"}
     assert list(path.parent.glob(f".{path.name}.*.tmp")) == []
