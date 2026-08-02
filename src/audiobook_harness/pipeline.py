@@ -97,6 +97,7 @@ PHASES = (
         ),
         (
             "quality.py",
+            "quality_policy.py",
             "selection_integrity.py",
             "asr_cache.py",
             "repair_analysis.py",

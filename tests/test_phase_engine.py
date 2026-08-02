@@ -191,6 +191,29 @@ def test_phase_identity_changes_only_for_declared_implementation_dependency(
     assert phase_input_identity(project, repo, synthesis) != first_synthesis
 
 
+def test_quality_policy_change_invalidates_cue_qa_identity(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    project = tmp_path / "project"
+    package = repo / "src/audiobook_harness"
+    (project / "source").mkdir(parents=True)
+    package.mkdir(parents=True)
+    (project / "project.yaml").write_text("title: Test")
+    (project / "source/chapter.txt").write_text("Text.")
+    (package / "quality.py").write_text("quality-v1")
+    (package / "quality_policy.py").write_text("policy-v1")
+    phase = Phase(
+        4,
+        "cue_qa",
+        (3,),
+        ("verification.json",),
+        (),
+        ("quality.py", "quality_policy.py"),
+    )
+    first = phase_input_identity(project, repo, phase)
+    (package / "quality_policy.py").write_text("policy-v2")
+    assert phase_input_identity(project, repo, phase) != first
+
+
 def test_missing_declared_implementation_dependency_fails_closed(
     tmp_path: Path,
 ) -> None:

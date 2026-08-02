@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from audiobook_harness.project import scaffold
 from audiobook_harness.project_lock import lock_path, project_writer_lock
 
 
@@ -63,3 +64,23 @@ def test_project_writer_lock_rejects_a_second_process(tmp_path: Path):
         )
     assert result.returncode != 0
     assert "locked" in result.stderr.lower()
+
+
+@pytest.mark.parametrize("command", ("stage", "promote"))
+def test_live_production_writer_blocks_direct_packaging_commands(
+    tmp_path: Path, command: str
+):
+    """A packaging command must fail before it can inspect or mutate media."""
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    with project_writer_lock(project):
+        result = subprocess.run(
+            [sys.executable, "-m", "audiobook_harness.cli", command, str(project)],
+            capture_output=True,
+            text=True,
+        )
+    assert result.returncode != 0
+    assert "locked" in result.stderr.lower()
+    assert not (project / "staging").exists()
+    assert not (project / "deliverables").exists()

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.5
+
+- Add process-level regressions proving direct stage and promotion commands
+  cannot race a live project writer.
+- Bind the versioned quality-policy implementation into cue-QA phase identity,
+  so a policy change invalidates its receipt and downstream evidence.
+
 ## 0.5.4
 
 - Extend transaction fault-injection coverage to status/event persistence,
