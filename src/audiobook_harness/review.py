@@ -459,8 +459,17 @@ def _write_review_processing_receipt(
             "decisions_sha256": report.get("decisions_sha256"),
         }
     )
+    receipt_path = project / "production/review-processing-receipt.json"
+    try:
+        previous = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        previous = {}
+    iteration = int(previous.get("iteration") or 0)
+    if previous.get("idempotency_key") != key:
+        iteration += 1
     receipt = {
         "version": 1,
+        "iteration": iteration,
         "idempotency_key": key,
         "review_identity_sha256": manifest.get("review_identity_sha256"),
         "decisions_sha256": report.get("decisions_sha256"),
@@ -471,7 +480,7 @@ def _write_review_processing_receipt(
         "authority": "derived_from_hash_bound_review_records",
     }
     receipt["identity_sha256"] = _canonical(receipt)
-    write_json(project / "production/review-processing-receipt.json", receipt)
+    write_json(receipt_path, receipt)
     return receipt
 
 
@@ -580,6 +589,7 @@ def review_status(project: Path) -> dict[str, Any]:
         "reviewer_action": {"code": action, "enabled": enabled},
         "review_evidence": pending_items,
         "review_processing": read("review-processing-receipt.json"),
+        "iteration": int(read("review-processing-receipt.json").get("iteration") or 0),
         "next_steps": [
             {
                 "code": "review" if enabled else "processing",
