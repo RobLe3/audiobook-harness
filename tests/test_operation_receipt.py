@@ -1,4 +1,5 @@
 from pathlib import Path
+import pytest
 
 from audiobook_harness.operation_receipt import (
     new_operation,
@@ -7,6 +8,7 @@ from audiobook_harness.operation_receipt import (
     update_operation,
     write_operation,
 )
+from audiobook_harness import project as project_module
 
 
 def test_operation_identity_is_stable_for_same_request():
@@ -38,3 +40,20 @@ def test_invalid_operation_receipt_is_not_authoritative(tmp_path: Path):
     path = tmp_path / "operation.json"
     path.write_text('{"schema":"wrong","state":"complete"}')
     assert read_operation(path) is None
+
+
+def test_atomic_receipt_write_preserves_previous_document_on_replace_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    path = tmp_path / "operation.json"
+    previous = new_operation(kind="repair", input_identity="old", payload={})
+    write_operation(path, previous)
+
+    def fail_replace(_temporary: str, _destination: Path) -> None:
+        raise OSError("simulated interruption")
+
+    monkeypatch.setattr(project_module.os, "replace", fail_replace)
+    current = new_operation(kind="repair", input_identity="new", payload={})
+    with pytest.raises(OSError, match="simulated interruption"):
+        write_operation(path, current)
+    assert read_operation(path) == previous

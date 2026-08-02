@@ -621,7 +621,11 @@ def main() -> None:
         "stage": lambda: stage(project, args.output),
         "promote": lambda: promote(project, args.stage_directory),
     }
-    emit(_run(project, args.command, actions[args.command]))
+    # All direct mutating commands share the same writer lock as `produce`.
+    # Without this guard, a standalone stage/promote could race a Review
+    # Center repair or another CLI invocation and overwrite receipts/media.
+    with project_writer_lock(project):
+        emit(_run(project, args.command, actions[args.command]))
 
 
 if __name__ == "__main__":

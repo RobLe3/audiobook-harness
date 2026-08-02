@@ -206,6 +206,57 @@ def test_promotion_rejects_modified_and_unexpected_media(
         promote(project)
 
 
+def test_promotion_failure_restores_previous_deliverables(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    _verified_stage(project, monkeypatch)
+    deliverables = project / "deliverables"
+    deliverables.mkdir()
+    (deliverables / "previous.m4a").write_text("known-good")
+
+    original_replace = Path.replace
+
+    def fail_install(self: Path, target: Path):
+        if self.name == "deliverables.next":
+            raise OSError("simulated promotion interruption")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_install)
+    with pytest.raises(OSError, match="promotion interruption"):
+        promote(project)
+    assert (deliverables / "previous.m4a").read_text() == "known-good"
+    assert not (project / "deliverables.next").exists()
+
+
+def test_promotion_receipt_failure_restores_previous_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    _verified_stage(project, monkeypatch)
+    deliverables = project / "deliverables"
+    deliverables.mkdir()
+    (deliverables / "previous.m4a").write_text("known-good")
+    release_manifest = project / "production/release-manifest.json"
+    release_manifest.write_text('{"state":"previous"}')
+    original_write_json = tts.write_json
+
+    def fail_release(path: Path, value: object) -> None:
+        if path.name == "release-manifest.json":
+            raise OSError("simulated receipt interruption")
+        original_write_json(path, value)
+
+    monkeypatch.setattr(tts, "write_json", fail_release)
+    with pytest.raises(OSError, match="receipt interruption"):
+        promote(project)
+    assert (deliverables / "previous.m4a").read_text() == "known-good"
+    assert json.loads(release_manifest.read_text()) == {"state": "previous"}
+
+
 def test_staging_refuses_unrelated_nonempty_and_dangerous_directories(tmp_path: Path):
     template = Path(__file__).parents[1] / "templates/project"
     project = tmp_path / "book"
@@ -229,6 +280,34 @@ def test_staging_replaces_only_same_project_owned_directory(tmp_path: Path):
     stage = _prepare_stage_directory(project, stage)
     assert not (stage / "old.bin").exists()
     assert (stage / STAGE_MARKER).is_file()
+
+
+def test_staging_failure_restores_previous_owned_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    target = project / "staging"
+    target.mkdir()
+    (target / STAGE_MARKER).write_text(json.dumps({"project": str(project.resolve())}))
+    (target / "previous.txt").write_text("known-good")
+
+    monkeypatch.setattr(
+        tts, "_stage_into", lambda _project, _output, **_kwargs: {}
+    )
+
+    original_replace = Path.replace
+
+    def fail_install(self: Path, destination: Path):
+        if self.name.startswith(".staging.phase-8-"):
+            raise OSError("simulated staging interruption")
+        return original_replace(self, destination)
+
+    monkeypatch.setattr(Path, "replace", fail_install)
+    with pytest.raises(OSError, match="staging interruption"):
+        tts.stage(project, target)
+    assert (target / "previous.txt").read_text() == "known-good"
 
 
 def test_legacy_release_command_refuses_direct_publication(tmp_path: Path):

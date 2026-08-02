@@ -974,9 +974,39 @@ def promote(project: Path, stage_directory: Path | None = None) -> dict[str, Any
             raise RuntimeError(
                 f"Cannot promote: copied media hash mismatch: {relative}"
             )
-    shutil.rmtree(paths["deliverables"], ignore_errors=True)
-    replacement.replace(paths["deliverables"])
-    report = {**manifest, "state": "promoted", "promoted_files": expected}
-    write_json(paths["deliverables"] / "promotion-receipt.json", report)
-    write_json(paths["production"] / "release-manifest.json", report)
+    # Keep the previous canonical release until the replacement has been
+    # atomically installed.  Deleting deliverables first would turn a later
+    # filesystem failure into permanent loss of the last known-good release.
+    deliverables = paths["deliverables"]
+    backup = deliverables.with_name(f".{deliverables.name}.previous-{os.getpid()}")
+    release_manifest = paths["production"] / "release-manifest.json"
+    release_manifest_backup = release_manifest.with_name(
+        f".{release_manifest.name}.previous-{os.getpid()}"
+    )
+    if backup.exists():
+        shutil.rmtree(backup)
+    if release_manifest_backup.exists():
+        release_manifest_backup.unlink()
+    if deliverables.exists():
+        deliverables.replace(backup)
+    if release_manifest.exists():
+        release_manifest.replace(release_manifest_backup)
+    try:
+        replacement.replace(deliverables)
+        report = {**manifest, "state": "promoted", "promoted_files": expected}
+        write_json(paths["deliverables"] / "promotion-receipt.json", report)
+        write_json(release_manifest, report)
+    except BaseException:
+        if deliverables.exists():
+            shutil.rmtree(deliverables, ignore_errors=True)
+        if backup.exists():
+            backup.replace(deliverables)
+        if release_manifest.exists():
+            release_manifest.unlink()
+        if release_manifest_backup.exists():
+            release_manifest_backup.replace(release_manifest)
+        shutil.rmtree(replacement, ignore_errors=True)
+        raise
+    shutil.rmtree(backup, ignore_errors=True)
+    release_manifest_backup.unlink(missing_ok=True)
     return report
