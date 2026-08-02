@@ -903,6 +903,8 @@ def stage_manifest_is_valid(project: Path, stage_directory: Path | None = None) 
     expected = manifest.get("expected_files")
     if not isinstance(expected, list) or not expected:
         return False
+    if any(not _safe_stage_name(value) for value in expected):
+        return False
     expected_names = sorted(str(value) for value in expected)
     actual = sorted(
         str(path.relative_to(stage_root))
@@ -922,6 +924,14 @@ def stage_manifest_is_valid(project: Path, stage_directory: Path | None = None) 
         and sha256(stage_root / name) == rows[name].get("sha256")
         for name in expected_names
     )
+
+
+def _safe_stage_name(value: object) -> bool:
+    """Reject manifest paths that could escape the staged directory."""
+
+    if not isinstance(value, str) or not value or Path(value).is_absolute():
+        return False
+    return ".." not in Path(value).parts
 
 
 def promote(project: Path, stage_directory: Path | None = None) -> dict[str, Any]:
@@ -948,6 +958,10 @@ def promote(project: Path, stage_directory: Path | None = None) -> dict[str, Any
             "Cannot promote: finalized review approval is missing, stale, rejected, or uncertain"
         )
     expected = manifest["expected_files"]
+    if not isinstance(expected, list) or any(
+        not _safe_stage_name(value) for value in expected
+    ):
+        raise RuntimeError("Cannot promote: manifest contains unsafe media paths")
     rows = {
         str(row["file"]): row
         for chapter in manifest.get("outputs", [])

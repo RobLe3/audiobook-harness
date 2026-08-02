@@ -206,6 +206,21 @@ def test_promotion_rejects_modified_and_unexpected_media(
         promote(project)
 
 
+def test_promotion_rejects_manifest_path_traversal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    _verified_stage(project, monkeypatch)
+    stage_manifest = project / "staging/stage-manifest.json"
+    value = json.loads(stage_manifest.read_text())
+    value["expected_files"] = ["../outside.m4a"]
+    stage_manifest.write_text(json.dumps(value))
+    with pytest.raises(RuntimeError, match="file set or media hashes"):
+        promote(project)
+
+
 def test_promotion_failure_restores_previous_deliverables(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
