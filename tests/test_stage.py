@@ -272,6 +272,30 @@ def test_promotion_receipt_failure_restores_previous_release(
     assert json.loads(release_manifest.read_text()) == {"state": "previous"}
 
 
+def test_promotion_copy_failure_restores_previous_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    _verified_stage(project, monkeypatch)
+    deliverables = project / "deliverables"
+    deliverables.mkdir()
+    (deliverables / "previous.m4a").write_text("known-good")
+    original_copy = tts.shutil.copy2
+
+    def fail_copy(source: Path, destination: Path, *args: object, **kwargs: object):
+        if destination.parent.name == "deliverables.next":
+            raise OSError("simulated media-copy interruption")
+        return original_copy(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr(tts.shutil, "copy2", fail_copy)
+    with pytest.raises(OSError, match="media-copy interruption"):
+        promote(project)
+    assert (deliverables / "previous.m4a").read_text() == "known-good"
+    assert not (project / "deliverables.next").exists()
+
+
 def test_staging_refuses_unrelated_nonempty_and_dangerous_directories(tmp_path: Path):
     template = Path(__file__).parents[1] / "templates/project"
     project = tmp_path / "book"

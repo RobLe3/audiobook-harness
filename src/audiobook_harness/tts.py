@@ -979,15 +979,19 @@ def promote(project: Path, stage_directory: Path | None = None) -> dict[str, Any
     replacement = project / "deliverables.next"
     shutil.rmtree(replacement, ignore_errors=True)
     replacement.mkdir(parents=True)
-    for relative in expected:
-        source = stage_root / str(relative)
-        target = replacement / str(relative)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-        if sha256(target) != rows[str(relative)]["sha256"]:
-            raise RuntimeError(
-                f"Cannot promote: copied media hash mismatch: {relative}"
-            )
+    try:
+        for relative in expected:
+            source = stage_root / str(relative)
+            target = replacement / str(relative)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            if sha256(target) != rows[str(relative)]["sha256"]:
+                raise RuntimeError(
+                    f"Cannot promote: copied media hash mismatch: {relative}"
+                )
+    except BaseException:
+        shutil.rmtree(replacement, ignore_errors=True)
+        raise
     # Keep the previous canonical release until the replacement has been
     # atomically installed.  Deleting deliverables first would turn a later
     # filesystem failure into permanent loss of the last known-good release.
