@@ -124,6 +124,43 @@ def test_missing_phase_receipt_does_not_invalidate_earlier_receipt(tmp_path: Pat
     assert not phase_receipt_is_valid(project, step=2, input_identity="inputs")
 
 
+def test_corrupt_phase_receipt_is_never_reusable(tmp_path: Path):
+    project = tmp_path / "book"
+    artifact = project / "production/analysis.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("{}", encoding="utf-8")
+    write_phase_receipt(project, step=1, input_identity="inputs", artifacts=[artifact])
+    receipt = project / "production/phase-receipts/step-1.json"
+    receipt.write_text('{"step":1,"artifacts":[{"path":"../../outside"}]}')
+    assert not phase_receipt_is_valid(project, step=1, input_identity="inputs")
+
+
+def test_duplicate_stage_media_names_are_rejected(tmp_path: Path):
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    report = tmp_path / "quality.json"
+    report.write_text("{}")
+    media = stage / "chapter.m4a"
+    media.write_bytes(b"verified")
+    receipt = write_stage_receipt(
+        tmp_path / "receipt.json",
+        run_id="run",
+        chapter_id="01",
+        quality_report=report,
+        media=[media, media],
+        dependency_fingerprint="inputs",
+    )
+    assert not receipt_is_valid(
+        receipt,
+        run_id="run",
+        chapter_id="01",
+        stage=stage,
+        quality_report=report,
+        expected_names={media.name},
+        dependency_fingerprint="inputs",
+    )
+
+
 def test_phase_repair_receipt_is_objective_and_hash_bound(tmp_path: Path):
     project = tmp_path
     dependency = tmp_path / "repair.py"

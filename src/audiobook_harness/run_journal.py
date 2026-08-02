@@ -292,7 +292,16 @@ def receipt_is_valid(
     rows = receipt.get("media", [])
     if (
         not isinstance(rows, list)
+        or len(rows) != len(expected_names)
         or {str(row.get("name")) for row in rows} != expected_names
+    ):
+        return False
+    if any(
+        not isinstance(row, dict)
+        or not row.get("name")
+        or Path(str(row["name"])).is_absolute()
+        or ".." in Path(str(row["name"])).parts
+        for row in rows
     ):
         return False
     return all(
