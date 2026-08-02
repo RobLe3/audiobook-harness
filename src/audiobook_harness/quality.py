@@ -26,6 +26,7 @@ from .pronunciation import (
 from .selection_integrity import audit_candidate_selection
 from .advisory_quality import collect_advisory_scores
 from .repair_analysis import build_repair_artifacts
+from .quality_policy import classify_quality_report
 from .asr_cache import evidence_key, load as load_asr_cache, save as save_asr_cache
 from .performance import resolve_profile
 
@@ -684,6 +685,7 @@ def verify(
             "secondary_new_decodes": secondary_misses,
         },
     }
+    report["quality_policy"] = classify_quality_report(report)
     write_json(paths["production"] / "verification.json", report)
     candidate_plan = json.loads(
         (paths["production"] / "candidate-plan.json").read_text(encoding="utf-8")

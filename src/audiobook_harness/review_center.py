@@ -430,6 +430,7 @@ def control(
     action: str, workspace: Path, host: str, port: int, config: Path | None = None
 ) -> dict[str, Any]:
     pid_file = _pid_path(workspace, config, port)
+    lock_file = pid_file.with_suffix(pid_file.suffix + ".lock")
     if action == "status":
         if not pid_file.is_file():
             return {"ok": False, "state": "stopped"}
@@ -470,6 +471,19 @@ def control(
         existing = control("status", workspace, host, port, config)
         if existing.get("ok"):
             return existing
+        try:
+            descriptor = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        except FileExistsError:
+            # Another local caller is already between the port check and PID
+            # publication.  Return a stable state instead of launching a
+            # second Review Center process.
+            return {
+                "ok": True,
+                "state": "starting",
+                "url": f"http://{host}:{port}/review-center/",
+                "detail": "another start operation is already in progress",
+            }
         log = Path(tempfile.gettempdir()) / "audiobook-harness-review-center.log"
         command = [
             sys.executable,
@@ -486,28 +500,29 @@ def control(
         ]
         if config:
             command += ["--config", str(config)]
-        with log.open("ab") as handle:
-            process = subprocess.Popen(
-                command,
-                stdout=handle,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
-                close_fds=True,
-            )
-        pid_file.write_text(
-            json.dumps(
+        try:
+            with log.open("ab") as handle:
+                process = subprocess.Popen(
+                    command,
+                    stdout=handle,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    close_fds=True,
+                )
+            write_json(
+                pid_file,
                 {
                     "pid": process.pid,
                     "workspace": str(workspace),
                     "port": port,
-                }
-            ),
-            encoding="utf-8",
-        )
-        return {
-            "ok": True,
-            "state": "starting",
-            "pid": process.pid,
-            "url": f"http://{host}:{port}/review-center/",
-        }
+                },
+            )
+            return {
+                "ok": True,
+                "state": "starting",
+                "pid": process.pid,
+                "url": f"http://{host}:{port}/review-center/",
+            }
+        finally:
+            lock_file.unlink(missing_ok=True)
     raise ValueError(f"unknown Review Center action: {action}")

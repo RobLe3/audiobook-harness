@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from . import __version__
+from .convergence import convergence_summary
 from .feedback import append_observations, compile_feedback, validate_decisions
 from .parity import project_profile_identity
 from .project import write_json
@@ -43,12 +44,20 @@ def item_evidence(item: dict[str, Any], category: str | None = None) -> dict[str
     selected = category or "other"
     keys = EVIDENCE_KEYS.get(selected, ())
     if not keys:
-        status, confidence, explanation = "manual_only", "low", "This category requires listener judgement."
+        status, confidence, explanation = (
+            "manual_only",
+            "low",
+            "This category requires listener judgement.",
+        )
     else:
         present = [key for key in keys if machine.get(key) not in (None, "")]
         status = "pass" if len(present) == len(keys) else "inconclusive"
         confidence = "medium" if status == "pass" else "low"
-        explanation = "All registered evidence is present; listener judgement may still be required." if status == "pass" else "Required evidence is missing or inconclusive."
+        explanation = (
+            "All registered evidence is present; listener judgement may still be required."
+            if status == "pass"
+            else "Required evidence is missing or inconclusive."
+        )
     return {
         "item": str(item.get("id", "")),
         "category": selected,
@@ -446,7 +455,9 @@ def _write_review_processing_receipt(
     """Persist idempotent post-review state without granting release authority."""
 
     decisions = [row for row in report.get("decisions", []) if isinstance(row, dict)]
-    addressed = sorted(str(row["id"]) for row in decisions if row.get("decision") == "approve")
+    addressed = sorted(
+        str(row["id"]) for row in decisions if row.get("decision") == "approve"
+    )
     pending = sorted(
         str(row["id"])
         for row in decisions
@@ -476,7 +487,9 @@ def _write_review_processing_receipt(
         "state": "complete" if not pending else "repair_queued",
         "addressed_items": addressed,
         "pending_items": pending,
-        "next_action": "continue_with_next_project" if not pending else "wait_for_repair",
+        "next_action": "continue_with_next_project"
+        if not pending
+        else "wait_for_repair",
         "authority": "derived_from_hash_bound_review_records",
     }
     receipt["identity_sha256"] = _canonical(receipt)
@@ -544,7 +557,9 @@ def review_status(project: Path) -> dict[str, Any]:
         item_id = str(item.get("id", ""))
         decision = decisions_by_id.get(item_id, {})
         if decision.get("decision") != "approve":
-            pending_items.append(item_evidence(item, str(decision.get("defect_category") or "other")))
+            pending_items.append(
+                item_evidence(item, str(decision.get("defect_category") or "other"))
+            )
     state = str(run.get("state", "not_started"))
     if state == "running" and owner == "active":
         action = "wait_for_generation"
@@ -590,10 +605,13 @@ def review_status(project: Path) -> dict[str, Any]:
         "review_evidence": pending_items,
         "review_processing": read("review-processing-receipt.json"),
         "iteration": int(read("review-processing-receipt.json").get("iteration") or 0),
+        "convergence": convergence_summary(project),
         "next_steps": [
             {
                 "code": "review" if enabled else "processing",
-                "label": "Review and finalize this project" if enabled else "Continue automatic processing",
+                "label": "Review and finalize this project"
+                if enabled
+                else "Continue automatic processing",
                 "detail": "Finalize the current decisions; independent projects remain available."
                 if enabled
                 else "The finalized review is recorded and its follow-up work is being reconciled.",
@@ -666,7 +684,7 @@ function decisions(){{return [...document.querySelectorAll("section")].filter(s=
 let timer;document.addEventListener("input",()=>{{clearTimeout(timer);timer=setTimeout(async()=>{{const r=await fetch("/api/review-draft",{{method:"PUT",headers,body:JSON.stringify({{decisions:decisions()}})}});document.querySelector("#status").textContent=r.ok?"Saved locally.":"Save error."; }},250);}});
 fetch("/api/review-draft").then(r=>r.json()).then(v=>{{for(const d of v.decisions||[]){{const s=document.querySelector(`section[data-id="${{CSS.escape(d.id)}}"]`);if(!s)continue;s.querySelector(".decision").value=d.decision||"";s.querySelector(".category").value=d.defect_category||"";s.querySelector(".note").value=d.note||"";}}}});
 document.querySelector("#finalize").onclick=async()=>{{const r=await fetch("/api/finalize-review",{{method:"POST",headers,body:JSON.stringify({{decisions:decisions()}})}});const v=await r.json();document.querySelector("#status").textContent=v.ok?"Finalized and approved.":(v.error||"Finalized with unresolved items.");}};
-async function refreshStatus(){{const r=await fetch("/api/status",{{cache:"no-store"}});if(!r.ok)return;const v=await r.json();const enabled=Boolean(v.reviewer_action?.enabled);document.querySelector("#finalize").disabled=!enabled;document.querySelectorAll("audio,select,input").forEach(x=>x.disabled=!enabled);document.querySelector("#status").textContent=enabled?"Current review media is ready. Decisions save locally.":`Reviewer action: ${{v.reviewer_action?.code||"unavailable"}}`;}}
+async function refreshStatus(){{const r=await fetch("/api/status",{{cache:"no-store"}});if(!r.ok)return;const v=await r.json();const enabled=Boolean(v.reviewer_action?.enabled);const c=v.convergence||{{}};document.querySelector("#finalize").disabled=!enabled;document.querySelectorAll("audio,select,input").forEach(x=>x.disabled=!enabled);const progress=c.iterations?` Iteration ${{c.iterations}}; findings ${{(c.findings_trajectory||[]).at(-1)??"?"}}.`:"";document.querySelector("#status").textContent=(enabled?"Current review media is ready. Decisions save locally.":`Reviewer action: ${{v.reviewer_action?.code||"unavailable"}}.`)+progress+(c.plateau?" Automatic repair plateau reached.":"");}}
 refreshStatus();setInterval(refreshStatus,5000);
 </script>"""
 

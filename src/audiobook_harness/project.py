@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -114,10 +116,38 @@ def performance_units(value: str) -> list[dict[str, Any]]:
 
 
 def write_json(path: Path, value: Any) -> None:
+    """Write JSON atomically so a killed worker cannot publish partial state.
+
+    Production receipts and status files are read by both the supervisor and
+    the Review Center.  A direct ``write_text`` can leave truncated JSON when
+    the process is interrupted between the write and close.  Writing a
+    temporary sibling, syncing it, and replacing the destination gives
+    readers either the previous complete document or the new complete one.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    payload = (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
     )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        try:
+            directory = path.parent.open("rb")
+        except OSError:
+            directory = None
+        if directory is not None:
+            with directory:
+                os.fsync(directory.fileno())
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
 
 
 def scaffold(destination: Path, template_root: Path) -> None:

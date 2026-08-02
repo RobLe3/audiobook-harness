@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
-import ast
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -10,6 +10,10 @@ from typing import Any
 from . import __version__
 from .project import write_json
 from .run_journal import phase_receipt_is_valid, valid_phase_repair_receipt
+
+
+class PhaseIdentityError(ValueError):
+    """A phase declared an invalid implementation dependency boundary."""
 
 
 @dataclass(frozen=True)
@@ -93,7 +97,7 @@ PHASES = (
         ),
         (
             "quality.py",
-            "candidate_selection.py",
+            "selection_integrity.py",
             "asr_cache.py",
             "repair_analysis.py",
             "advisory_quality.py",
@@ -106,7 +110,7 @@ PHASES = (
         (4,),
         ("release-contract.json",),
         (("release-contract.json", "ok"),),
-        ("tts.py#prepare_release_contract", "candidate_selection.py"),
+        ("tts.py#prepare_release_contract", "selection_integrity.py"),
     ),
     Phase(
         6,
@@ -146,7 +150,7 @@ PHASES = (
         (
             "tts.py#stage,_stage_into,encode_assembled,_prepare_stage_directory,_probe_audio",
             "encoded_quality.py",
-            "publication.py",
+            "tts.py#promote",
             "review.py",
         ),
     ),
@@ -170,6 +174,95 @@ def pipeline_contract() -> dict[str, Any]:
     return payload
 
 
+def validate_phase_implementation_dependencies(
+    repo: Path, phases: tuple[Phase, ...] = PHASES
+) -> None:
+    """Fail closed when a declared phase implementation dependency is invalid."""
+
+    package = (repo / "src/audiobook_harness").resolve()
+    for phase in phases:
+        seen: set[str] = set()
+        artifact_names: set[str] = set()
+        for artifact in phase.required_artifacts:
+            artifact_path = Path(artifact)
+            if (
+                not artifact
+                or artifact_path.is_absolute()
+                or ".." in artifact_path.parts
+                or artifact in artifact_names
+            ):
+                raise PhaseIdentityError(
+                    f"phase {phase.number} declares invalid or duplicate artifact: {artifact!r}"
+                )
+            artifact_names.add(artifact)
+        predicate_names: set[str] = set()
+        for artifact, _field in phase.success_predicates:
+            if artifact not in artifact_names or artifact in predicate_names:
+                raise PhaseIdentityError(
+                    f"phase {phase.number} declares invalid or duplicate success predicate: {artifact!r}"
+                )
+            predicate_names.add(artifact)
+        for dependency in phase.implementation_dependencies:
+            filename, separator, selectors_text = dependency.partition("#")
+            if dependency in seen:
+                raise PhaseIdentityError(
+                    f"phase {phase.number} declares duplicate implementation dependency: {dependency}"
+                )
+            seen.add(dependency)
+            relative = Path(filename)
+            if ".." in relative.parts:
+                raise PhaseIdentityError(
+                    f"phase {phase.number} implementation dependency escapes package: {dependency}"
+                )
+            if (
+                not filename
+                or relative.is_absolute()
+                or (separator and not selectors_text)
+            ):
+                raise PhaseIdentityError(
+                    f"phase {phase.number} implementation dependency is not a safe package-relative path: {dependency}"
+                )
+            path = package / relative
+            if path.is_symlink():
+                raise PhaseIdentityError(
+                    f"phase {phase.number} implementation dependency must not be a symlink: {dependency}"
+                )
+            path = path.resolve()
+            if not path.is_relative_to(package):
+                raise PhaseIdentityError(
+                    f"phase {phase.number} implementation dependency escapes package: {dependency}"
+                )
+            if not path.is_file():
+                raise PhaseIdentityError(
+                    f"phase {phase.number} implementation dependency does not exist: {dependency}"
+                )
+            if selectors_text:
+                selectors = tuple(
+                    selector.strip() for selector in selectors_text.split(",")
+                )
+                if any(not selector for selector in selectors) or len(
+                    set(selectors)
+                ) != len(selectors):
+                    raise PhaseIdentityError(
+                        f"phase {phase.number} implementation selectors are not unique: {dependency}"
+                    )
+                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+                available = {
+                    node.name
+                    for node in tree.body
+                    if isinstance(
+                        node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                    )
+                }
+                missing = [
+                    selector for selector in selectors if selector not in available
+                ]
+                if missing:
+                    raise PhaseIdentityError(
+                        f"phase {phase.number} implementation selector is missing: {dependency} ({', '.join(missing)})"
+                    )
+
+
 def phase_input_identity(project: Path, repo: Path, phase: Phase) -> str:
     """Hash only authored inputs, predecessor receipts, and phase-owned code."""
     paths = [
@@ -179,8 +272,9 @@ def phase_input_identity(project: Path, repo: Path, phase: Phase) -> str:
     ]
     paths.extend(sorted((project / "source").glob("*.txt")))
     package = repo / "src/audiobook_harness"
+    validate_phase_implementation_dependencies(repo, phases=(phase,))
     implementation: list[tuple[str, Path, tuple[str, ...]]] = []
-    for dependency in phase.implementation_dependencies:
+    for dependency in sorted(phase.implementation_dependencies):
         filename, _, selectors = dependency.partition("#")
         implementation.append(
             (
@@ -194,16 +288,27 @@ def phase_input_identity(project: Path, repo: Path, phase: Phase) -> str:
     rows = []
     for path in paths:
         if path.is_file():
+            try:
+                logical_path = path.resolve().relative_to(project.resolve()).as_posix()
+            except ValueError:
+                try:
+                    logical_path = path.resolve().relative_to(repo.resolve()).as_posix()
+                except ValueError as error:
+                    raise PhaseIdentityError(
+                        f"phase {phase.number} input is outside project/repository: {path}"
+                    ) from error
             rows.append(
                 {
-                    "path": str(path),
+                    "path": logical_path,
                     "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                     "bytes": path.stat().st_size,
                 }
             )
     for label, path, selectors in implementation:
         if not path.is_file():
-            continue
+            raise PhaseIdentityError(
+                f"phase {phase.number} implementation dependency does not exist: {label}"
+            )
         content = path.read_text(encoding="utf-8")
         selected = content
         if selectors:
@@ -220,7 +325,7 @@ def phase_input_identity(project: Path, repo: Path, phase: Phase) -> str:
                     if segment is not None:
                         chunks.append(segment)
             if len(chunks) != len(selectors):
-                raise ValueError(
+                raise PhaseIdentityError(
                     f"phase {phase.number} implementation selector is missing: {label}"
                 )
             selected = "\n\n".join(chunks)
@@ -232,8 +337,12 @@ def phase_input_identity(project: Path, repo: Path, phase: Phase) -> str:
                 "bytes": len(encoded),
             }
         )
+    phase_contract = asdict(phase)
+    phase_contract["implementation_dependencies"] = tuple(
+        sorted(phase.implementation_dependencies)
+    )
     value = {
-        "phase_contract": asdict(phase),
+        "phase_contract": phase_contract,
         "phase": phase.number,
         "inputs": rows,
     }

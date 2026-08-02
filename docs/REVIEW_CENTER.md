@@ -1,7 +1,7 @@
 # Review Center
 
 The Review Center is the local, project-agnostic listener-review surface for
-Audiobook Harness 0.5.0. It is a convenience interface over the existing
+Audiobook Harness 0.5.1. It is a convenience interface over the existing
 hash-bound review contract; it is not publication authority.
 
 ## Configure projects
@@ -41,7 +41,9 @@ audiobook-harness review-center stop --workspace-root . --config review-center.j
 
 The service binds to loopback only. It uses one port for the chooser, status,
 media, draft autosave, and finalization. The controller keeps a temporary PID
-file and refuses to operate on a mismatched process.
+file and refuses to operate on a mismatched process. Startup uses an exclusive
+local lease, so repeated start requests while the server is launching are
+idempotent rather than creating competing processes.
 
 ## Routes
 

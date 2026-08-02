@@ -193,10 +193,12 @@ def production_input_identity(project: Path, repo: Path) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def candidate_failure_signature(failures: list[str], input_identity: str) -> str:
+def candidate_failure_signature(
+    failures: list[str], input_identity: str, strategy: str = "regenerate_failed_units"
+) -> str:
     value = {
         "classification": "candidate_quality_rejection",
-        "action": "regenerate_failed_units",
+        "action": strategy,
         "failed_units": sorted({str(item) for item in failures}),
         "input_identity": input_identity,
     }
@@ -224,9 +226,10 @@ def decide_candidate_retry(
     input_identity: str,
     previous_signatures: set[str],
     remaining_budget: int,
+    strategy: str = "regenerate_failed_units",
 ) -> dict[str, Any]:
     """Retry failed units only when this exact failure has not proved terminal."""
-    signature = candidate_failure_signature(failures, input_identity)
+    signature = candidate_failure_signature(failures, input_identity, strategy)
     if not failures:
         return {
             "retry": False,
@@ -249,7 +252,7 @@ def decide_candidate_retry(
         "retry": True,
         "reason": "bounded_failed_unit_regeneration",
         "signature": signature,
-        "action": "regenerate_failed_units",
+        "action": strategy,
     }
 
 

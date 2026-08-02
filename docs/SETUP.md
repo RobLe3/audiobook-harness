@@ -2,6 +2,15 @@
 
 Requires Python 3.12 and a supported desktop operating system.
 
+For a reproducible development environment, use the committed lockfile:
+
+```bash
+uv sync --frozen --extra dev
+```
+
+The explicit setup script remains the supported path for installing optional
+local models and external tools.
+
 `python scripts/setup.py --interactive` asks before installing system packages,
 the optional ASR verification stack plus pinned model weights, or MFA. The core
 package supports project creation and analysis without installing Whisper/PyTorch;

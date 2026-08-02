@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "license": "CC0-1.0",
+  "purpose": "Small original, text-only quality-policy regression corpus.",
+  "cases": [
+    {"id": "exact-pass", "input": "The signal is clear.", "expected": "pass"},
+    {"id": "skipped-word", "input": "The signal is clear.", "evidence": {"failures": ["u1"]}, "expected": "automatic_repair"},
+    {"id": "reviewed-term-missing", "input": "The signal is clear.", "evidence": {"lexicon": {"ok": false}}, "expected": "review_required"},
+    {"id": "alignment-missing", "input": "The signal is clear.", "evidence": {"lexicon": {"ok": true}, "forced_alignment": {"ok": false}}, "expected": "blocked"}
+  ]
+}

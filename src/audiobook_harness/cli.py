@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 from . import __version__
+from .convergence import append_iteration
 from .feedback import compile_feedback, promote_rule
 from .measurements import build_quality_measurements
 from .parity import feature_parity
@@ -13,6 +14,7 @@ from .pipeline import PHASES, audit_pipeline, phase_input_identity, resume_plan
 from .phase_engine import PhaseExecutionError, execute_phase
 from .analysis import analyze
 from .project import scaffold
+from .project_lock import project_writer_lock
 from .performance import resolve_profile
 from .quality import verify
 from .resilience import (
@@ -135,7 +137,7 @@ def _production_progress(
     ]
 
 
-def produce(
+def _produce_unlocked(
     project: Path,
     *,
     output: Path | None,
@@ -150,6 +152,7 @@ def produce(
     input_identity = production_input_identity(project, REPO)
     previous_signatures = terminal_signatures(ledger)
     retries = 0
+    iteration = 0
     phase_index = 0
     phase_artifacts = {
         phase.number: [production / name for name in phase.required_artifacts]
@@ -201,6 +204,8 @@ def produce(
             input_identity=input_identity,
             candidate_retries=retries,
             maximum_candidate_retries=maximum_candidate_retries,
+            convergence_iteration=iteration,
+            convergence_state="automatic_work" if iteration else "initial_production",
             error=None,
         )
 
@@ -262,67 +267,116 @@ def produce(
                 (production / "verification.json").read_text(encoding="utf-8")
             )
         failures = [str(item) for item in verification.get("failures", [])]
-        if first_step <= 4 and not verification.get("ok"):
-            phase_index = 3
-            progress(phase_index, PRODUCTION_STEPS[phase_index])
+        while first_step <= 4 and not verification.get("ok"):
+            iteration += 1
+            repair_plan = json.loads(
+                (production / "repair-plan.json").read_text(encoding="utf-8")
+            )
+            execution_mode = automatic_execution_mode(repair_plan)
+            strategy = str(
+                next(
+                    (
+                        row.get("strategy", {}).get("id")
+                        for row in repair_plan.get("repairs", [])
+                        if isinstance(row, dict)
+                        and isinstance(row.get("strategy"), dict)
+                    ),
+                    execution_mode,
+                )
+            )
             decision = decide_candidate_retry(
                 failures,
                 input_identity=input_identity,
                 previous_signatures=previous_signatures,
                 remaining_budget=maximum_candidate_retries - retries,
+                strategy=strategy,
             )
-            if decision.get("retry") is True:
-                retries += 1
-                repair_plan = json.loads(
-                    (production / "repair-plan.json").read_text(encoding="utf-8")
-                )
-                execution_mode = automatic_execution_mode(repair_plan)
-                if execution_mode == "review_required":
-                    raise RuntimeError(
-                        "Automatic repair requires semantic restructuring or focused review; "
-                        "inspect production/repair-plan.json."
-                    )
-                if execution_mode == "regenerate_failed_units":
-                    generation = run_phase(
-                        2, lambda: generate(project, REPO, failed_only=True)
-                    )
-                    run_phase(3, lambda: realize_generation_manifest(project))
-                try:
-                    verification = run_phase(
-                        4,
-                        lambda: verify(
-                            project, REPO, performance_profile=performance_profile
+            if execution_mode == "review_required":
+                append_iteration(
+                    project,
+                    {
+                        "iteration": iteration,
+                        "state": "review_required",
+                        "findings": len(failures),
+                        "objective_score": verification.get("objective_score"),
+                        "evidence_fingerprint": str(
+                            verification.get("identity_sha256", "")
                         ),
-                    )
-                except PhaseExecutionError as error:
-                    if (
-                        error.result.status != "repairable_failure"
-                        or "verification.json" not in error.result.evidence
-                    ):
-                        raise
-                    verification = json.loads(
-                        (production / "verification.json").read_text(encoding="utf-8")
-                    )
-                failures = [str(item) for item in verification.get("failures", [])]
-            if not verification.get("ok"):
-                terminal = decide_candidate_retry(
-                    failures,
-                    input_identity=input_identity,
-                    previous_signatures=previous_signatures,
-                    remaining_budget=maximum_candidate_retries - retries,
+                        "strategy": strategy,
+                        "stop_reason": "safe_repair_strategy_requires_review",
+                    },
                 )
-                if failures and str(terminal["signature"]) not in previous_signatures:
-                    append_terminal_failure(
-                        ledger,
-                        signature=str(terminal["signature"]),
-                        input_identity=input_identity,
-                        failures=failures,
-                        reason=str(terminal["reason"]),
-                    )
+                raise RuntimeError(
+                    "Automatic repair requires semantic restructuring or focused review; "
+                    "inspect production/repair-plan.json."
+                )
+            if not decision.get("retry"):
+                signature = str(decision["signature"])
+                previous_signatures.add(signature)
+                append_terminal_failure(
+                    ledger,
+                    signature=signature,
+                    input_identity=input_identity,
+                    failures=failures,
+                    reason=str(decision["reason"]),
+                )
+                append_iteration(
+                    project,
+                    {
+                        "iteration": iteration,
+                        "state": "blocked",
+                        "findings": len(failures),
+                        "objective_score": verification.get("objective_score"),
+                        "evidence_fingerprint": str(
+                            verification.get("identity_sha256", "")
+                        ),
+                        "strategy": strategy,
+                        "stop_reason": str(decision["reason"]),
+                    },
+                )
                 raise RuntimeError(
                     "Verification remains blocked; inspect production/verification.json. "
-                    f"Automatic recovery stopped: {terminal['reason']}."
+                    f"Automatic recovery stopped: {decision['reason']}."
                 )
+            retries += 1
+            phase_index = 3
+            progress(phase_index, PRODUCTION_STEPS[phase_index])
+            if execution_mode == "regenerate_failed_units":
+                generation = run_phase(
+                    2, lambda: generate(project, REPO, failed_only=True)
+                )
+                run_phase(3, lambda: realize_generation_manifest(project))
+            try:
+                verification = run_phase(
+                    4,
+                    lambda: verify(
+                        project, REPO, performance_profile=performance_profile
+                    ),
+                )
+            except PhaseExecutionError as error:
+                if (
+                    error.result.status != "repairable_failure"
+                    or "verification.json" not in error.result.evidence
+                ):
+                    raise
+                verification = json.loads(
+                    (production / "verification.json").read_text(encoding="utf-8")
+                )
+            failures = [str(item) for item in verification.get("failures", [])]
+            append_iteration(
+                project,
+                {
+                    "iteration": iteration,
+                    "state": "automatic_work" if failures else "objective_pass",
+                    "findings": len(failures),
+                    "objective_score": verification.get("objective_score"),
+                    "evidence_fingerprint": str(
+                        verification.get("identity_sha256", "")
+                    ),
+                    "strategy": strategy,
+                    "stop_reason": None if failures else "objective_gates_passed",
+                },
+            )
         if first_step <= 5:
             run_phase(5, lambda: prepare_release_contract(project))
         if first_step <= 6:
@@ -363,6 +417,8 @@ def produce(
         input_identity=input_identity,
         candidate_retries=retries,
         maximum_candidate_retries=maximum_candidate_retries,
+        convergence_iteration=iteration,
+        convergence_state="objective_complete",
         error=None,
     )
     return {
@@ -374,6 +430,27 @@ def produce(
         "candidate_retries": retries,
         "input_identity": input_identity,
     }
+
+
+def produce(
+    project: Path,
+    *,
+    output: Path | None,
+    performance_profile: str,
+    maximum_candidate_retries: int,
+    resume: bool = False,
+    dry_run: bool = False,
+) -> dict[str, object]:
+    """Run production as the sole writer for this project."""
+    with project_writer_lock(project):
+        return _produce_unlocked(
+            project,
+            output=output,
+            performance_profile=performance_profile,
+            maximum_candidate_retries=maximum_candidate_retries,
+            resume=resume,
+            dry_run=dry_run,
+        )
 
 
 def main() -> None:
@@ -434,7 +511,11 @@ def main() -> None:
                 "--performance-profile", choices=("legacy", "auto"), default="auto"
             )
             command.add_argument(
-                "--max-candidate-retries", type=int, choices=(0, 1), default=1
+                "--max-candidate-retries",
+                type=int,
+                choices=range(0, 9),
+                default=3,
+                help="Maximum evidence-bounded automatic repair iterations (0-8).",
             )
             command.add_argument(
                 "--resume",

@@ -1,6 +1,6 @@
 # First audiobook in one sitting
 
-This document describes Audiobook Harness **0.4.15**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.5.1**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 This guide assumes you have the right to make an audiobook from the manuscript
 and to use the chosen voice. It uses no cloud TTS, telemetry, or hidden
@@ -43,8 +43,9 @@ fallbacks.
    cue-specific phrase aliases.
 8. Run `produce`. It generates bounded deterministic candidates, verifies them
    with two local Whisper decoders, acoustic checks and per-take local MFA
-   alignment, adds one bounded candidate repair only for failed units, and
-   stages the verified result.
+   alignment, then iterates through evidence-bounded repairs for failed units.
+   The loop records each iteration and stops for focused listener review when
+   the next strategy is subjective or the evidence fingerprint plateaus.
 9. Monitor `status --watch`, listen to the staged result, inspect
    `production/verification.json`, then run `promote`. Promotion is blocked
    until the staged manifest still matches successful verification.

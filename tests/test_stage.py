@@ -154,7 +154,7 @@ def _verified_stage(
     (project / "production/stage-manifest.json").write_text(json.dumps(manifest))
     review = build_review(project, stage)
     assert review["version"] == 3
-    assert review["audiobook_harness_version"] == "0.5.0"
+    assert review["audiobook_harness_version"] == "0.5.1"
     finalize_review(
         project, [{"id": row["id"], "decision": "approve"} for row in review["items"]]
     )
@@ -268,7 +268,7 @@ def test_repaired_middle_unit_is_restored_to_manuscript_order(tmp_path: Path):
     assert [row["unit_index"] for row in ordered] == [1, 2, 3]
 
 
-def test_produce_repairs_failed_units_once_then_stages(
+def test_produce_repeats_distinct_repairs_then_stages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     template = Path(__file__).parents[1] / "templates/project"
@@ -278,6 +278,7 @@ def test_produce_repairs_failed_units_once_then_stages(
     verifications = iter(
         [
             {"ok": False, "failures": ["chapter-01-u001"]},
+            {"ok": False, "failures": ["chapter-01-u002"]},
             {"ok": True, "failures": [], "takes": []},
         ]
     )
@@ -364,11 +365,11 @@ def test_produce_repairs_failed_units_once_then_stages(
         project,
         output=None,
         performance_profile="auto",
-        maximum_candidate_retries=1,
+        maximum_candidate_retries=2,
     )
     assert result["ok"]
-    assert result["candidate_retries"] == 1
-    assert calls == [("generate", False), ("generate", True)]
+    assert result["candidate_retries"] == 2
+    assert calls == [("generate", False), ("generate", True), ("generate", True)]
     for phase in cli.PHASES:
         assert phase_receipt_is_valid(
             project,
@@ -378,6 +379,11 @@ def test_produce_repairs_failed_units_once_then_stages(
     status = json.loads((project / "production/run-status.json").read_text())
     assert status["state"] == "complete"
     assert all(row["state"] == "complete" for row in status["steps"])
+    iterations = (
+        (project / "production/convergence-iterations.jsonl").read_text().splitlines()
+    )
+    assert len(iterations) == 2
+    assert json.loads(iterations[-1])["state"] == "objective_pass"
 
 
 def test_produce_resume_dry_run_starts_at_first_missing_phase(tmp_path: Path):

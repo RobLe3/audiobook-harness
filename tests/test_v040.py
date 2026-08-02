@@ -60,6 +60,7 @@ def test_review_status_disables_review_when_generation_failed(tmp_path: Path):
     )
     status = review_status(tmp_path)
     assert status["reviewer_action"]["code"] == "diagnostic_unavailable"
+    assert status["convergence"]["iterations"] == 0
 
 
 def test_review_status_uses_structured_phase_failure(tmp_path: Path):

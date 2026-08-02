@@ -1,6 +1,6 @@
 # Audiobook Harness
 
-Current release: **0.5.0**. Audiobook Harness uses one SemVer product identity;
+Current release: **0.5.1**. Audiobook Harness uses one SemVer product identity;
 project names and profile hashes do not create a second harness version. See
 [versioning and compatibility](docs/VERSIONING.md).
 
@@ -13,7 +13,7 @@ It focuses on manuscript analysis, pronunciation control, contextual dialogue,
 Kokoro TTS, dual-checkpoint local Whisper verification, forced alignment, and reproducible
 M4A/MP3 delivery with staged promotion.
 
-Version 0.5.0 executes all eight phases as receipt-last transactions. Each
+Version 0.5.1 executes all eight phases as receipt-last transactions. Each
 phase has its own dependency identity, success predicates, retry policy, and
 structured result. A small harness or review-server change therefore cannot
 invalidate unrelated audio work. Failed implementation attempts roll back
@@ -91,6 +91,19 @@ manuscript, lexicon, configuration and harness code, an input-bound recovery
 ledger prevents the next run from spending the same retry again. Changed inputs
 receive a new identity and can be tried normally.
 
+## Structural audit
+
+The repository includes a local CodeGraph/Sentrux audit for architecture
+changes. Initialize CodeGraph once, then run:
+
+```bash
+codegraph init .
+scripts/audit-structure.sh
+```
+
+The audit is local engineering feedback only. It excludes publication
+authority, audio decisions, model setup, and cloud services.
+
 ## Quick start
 
 ```bash
@@ -143,15 +156,37 @@ as failed by the current verification report.
 
 ## Verify this checkout
 
+The canonical reproducible development install uses the committed `uv.lock`:
+
+```bash
+uv sync --frozen --extra dev
+```
+
+The existing `.venv` setup remains supported for operators who use the
+documented setup script.
+
 Run the repository checks before starting a book:
 
 ```bash
 scripts/test-harness.sh
 ```
 
-It runs the unit tests and linting with the local virtual environment. If the
+It runs the unit tests and linting with the local virtual environment. For a
+machine-readable report (including optional formatting status), run
+`.venv/bin/python scripts/verify-harness.py --report production/verification-report.json`.
+If the
 already-built local smoke image is present, it also runs its model-free offline
 container check; it never pulls an image or downloads a model.
+
+`produce --max-candidate-retries N` uses an evidence-bounded convergence ladder
+(0–8 iterations). It reuses valid phase receipts, records
+`production/convergence-iterations.jsonl`, and stops with a focused review when
+the next repair is subjective or when the evidence fingerprint plateaus. It
+never treats an acoustic score as listener approval.
+
+Production uses a project-local single-writer lock. A second command against
+the same project fails clearly while the owner is active; an orphaned lock is
+recovered only when its recorded process no longer exists.
 
 ## Review Center
 
@@ -219,7 +254,7 @@ See [the local interactive walkthrough instructions](docs/assets/README.md).
 
 ## v0.5 review gate
 
-Version 0.5.0 writes source-preserving analysis contracts for structure, spoken
+Version 0.5.1 writes source-preserving analysis contracts for structure, spoken
 forms, dialogue, prosody and TTS risk. After staging, run
 `audiobook-harness review PROJECT`; the loopback service saves review drafts
 directly under `production/`. Finalize decisions in the panel or with
@@ -231,7 +266,7 @@ and the documented repetition or editorial-authority threshold. Existing
 projects can inspect an upgrade with `audiobook-harness upgrade-project
 PROJECT`; applying it requires the reported inventory hash.
 
-Version 0.5.0 also exposes the production contract directly:
+Version 0.5.1 also exposes the production contract directly:
 
 ```bash
 audiobook-harness pipeline-audit PROJECT

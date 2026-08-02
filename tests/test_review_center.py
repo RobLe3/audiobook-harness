@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from audiobook_harness.review_center import load_projects
+from audiobook_harness.review_center import _pid_path, control, load_projects
 
 
 def test_load_projects_is_explicit_and_uses_project_titles(tmp_path: Path):
@@ -28,3 +28,15 @@ def test_load_projects_rejects_paths_outside_workspace(tmp_path: Path):
         assert "Invalid project path" in str(error)
     else:
         raise AssertionError("unsafe project path was accepted")
+
+
+def test_review_center_start_is_idempotent_while_another_start_holds_lock(
+    tmp_path: Path,
+):
+    lock = _pid_path(tmp_path, None, 8765).with_suffix(".pid.lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text("starting")
+    result = control("start", tmp_path, "127.0.0.1", 8765)
+    assert result["ok"]
+    assert result["state"] == "starting"
+    assert "already in progress" in result["detail"]

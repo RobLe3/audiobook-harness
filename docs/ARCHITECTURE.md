@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes Audiobook Harness **0.4.15**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.5.1**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 ## Performance and render lineage
 
-Version 0.4.15 treats the clean performed speech as the immutable take. Channel,
+Version 0.5.1 treats the clean performed speech as the immutable take. Channel,
 codec, mastering, and presentation renders are derived identities whose hashes
 name their parent take and processor contract. Listener decisions can therefore
 remain attached to unchanged performances while a derived render is rebuilt.
@@ -113,3 +113,17 @@ bound to the changed dependency bytes. It is never human approval.
 Staging is the end of unattended authority. Promotion remains a separate
 command so the listener can inspect the verification report and staged audio
 before replacing deliverables.
+
+## Durable state and structural checks
+
+JSON status, receipts, and review records are written through an atomic
+temporary-file replacement. A process interruption therefore leaves readers a
+complete previous document or a complete new document, never a partial JSON
+file. Review Center startup also uses an exclusive local lease so concurrent
+start requests cannot create two servers for the same workspace and port.
+
+The repository includes local CodeGraph and Sentrux guardrails. Run
+`scripts/audit-structure.sh` after initializing CodeGraph to inspect the
+dependency graph, enforce `.sentrux/rules.toml`, and compare the structural
+baseline. These checks are engineering diagnostics only and do not grant
+audio publication authority.

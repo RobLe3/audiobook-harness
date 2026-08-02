@@ -8,3 +8,4 @@ projects/*/assets/generated/
 __pycache__/
 .pytest_cache/
 .DS_Store
+.codegraph/

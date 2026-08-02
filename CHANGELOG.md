@@ -1,14 +1,14 @@
 # Changelog
 
-## 0.5.0
+## 0.5.1
 
-- Add a project-agnostic local Review Center with multi-project discovery,
-  project-scoped status/media/review routes, and a loopback-only lifecycle
-  controller (`start`, `stop`, `restart`, `status`).
-- Preserve the existing single-project `review PROJECT` command and hash-bound
-  review finalization contract.
-- Document the Review Center workflow and add local animated/interactive
-  walkthroughs without introducing hosted services or GitHub workflows.
+- Align the public package, reports, agent contract, README, and compatibility
+  documentation on the 0.5.1 product identity.
+- Clarify that review-iteration receipts and the local Review Center remain
+  review-only and never replace staged publication authority.
+- Keep the existing bounded repair and phase-resume behavior unchanged; the
+  project-specific autonomous convergence controller remains outside this
+  public package until its implementation is ported and tested here.
 
 ## 0.4.7
 

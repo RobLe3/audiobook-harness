@@ -153,6 +153,13 @@ def render_status(project: Path, status: dict[str, Any] | None = None) -> Path:
             f"{status.get('maximum_candidate_retries')} used. "
             "Quality thresholds remain unchanged.\n"
         )
+    convergence_detail = ""
+    if status.get("convergence_iteration") is not None:
+        convergence_detail = (
+            "\n**Convergence:** iteration "
+            f"{status.get('convergence_iteration', 0)} — "
+            f"`{status.get('convergence_state', 'unknown')}`.\n"
+        )
     asr_detail = ""
     if asr is not None:
         asr_detail = (
@@ -168,7 +175,7 @@ def render_status(project: Path, status: dict[str, Any] | None = None) -> Path:
         f"Updated: {status.get('updated_at', _now())}\n\n"
         f"**State:** `{status.get('state', 'not_started')}`\n\n"
         f"**Production owner:** `{owner_state}` — {owner_detail}.\n"
-        f"{history}{retry_detail}{asr_detail}\n"
+        f"{history}{retry_detail}{convergence_detail}{asr_detail}\n"
         f"`[{bar}] {completed}/{len(steps)} steps complete`\n\n"
         f"**Current:** {active_step}\n\n"
         + "\n".join(

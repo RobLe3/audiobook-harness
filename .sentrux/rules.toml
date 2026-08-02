@@ -1,0 +1,42 @@
+# Local architectural guardrails for Audiobook Harness.
+# Keep this file intentionally permissive while the first refactor lands; the
+# baseline will tighten thresholds only after the current package is measured.
+
+[constraints]
+max_cycles = 0
+max_cc = 60
+max_fn_lines = 400
+max_file_lines = 1200
+max_coupling_score = 1.0
+max_upward_violations = 0
+no_god_files = false
+
+[language.python.constraints]
+max_cc = 60
+max_fn_lines = 400
+max_file_lines = 1200
+
+[[layers]]
+name = "core"
+paths = ["src/audiobook_harness/project.py", "src/audiobook_harness/contracts.py", "src/audiobook_harness/run_journal.py"]
+order = 0
+
+[[layers]]
+name = "domain"
+paths = ["src/audiobook_harness/analysis.py", "src/audiobook_harness/quality.py", "src/audiobook_harness/tts.py", "src/audiobook_harness/repair_analysis.py", "src/audiobook_harness/resilience.py"]
+order = 1
+
+[[layers]]
+name = "interface"
+paths = ["src/audiobook_harness/cli.py", "src/audiobook_harness/review.py", "src/audiobook_harness/review_center.py"]
+order = 2
+
+[[boundaries]]
+from = "src/audiobook_harness/review_center.py"
+to = "src/audiobook_harness/tts.py"
+reason = "Review Center must invoke domain operations through an application adapter, not import synthesis internals directly."
+
+[[boundaries]]
+from = "src/audiobook_harness/review.py"
+to = "src/audiobook_harness/tts.py"
+reason = "Review manifest and decision processing must remain independent from synthesis and packaging internals."

@@ -7,6 +7,7 @@ from audiobook_harness.project import (
     performance_units,
     scaffold,
     sentence_units,
+    write_json,
 )
 from audiobook_harness.pronunciation import audit_lexicon
 
@@ -20,6 +21,17 @@ def test_normalized_words_handles_typographic_apostrophes():
         "d",
         "c",
     ]
+
+
+def test_write_json_replaces_atomically_and_leaves_valid_json(tmp_path: Path):
+    path = tmp_path / "production" / "state.json"
+
+    write_json(path, {"state": "running", "step": 1})
+    assert json.loads(path.read_text()) == {"state": "running", "step": 1}
+
+    write_json(path, {"state": "complete", "step": 8})
+    assert json.loads(path.read_text()) == {"state": "complete", "step": 8}
+    assert list(path.parent.glob(f".{path.name}.*.tmp")) == []
 
 
 def test_normalized_words_treats_hyphenated_compounds_as_closed_words():
