@@ -1,5 +1,7 @@
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -28,3 +30,23 @@ def test_project_writer_lock_removes_stale_owner(tmp_path: Path):
             == os.getpid()
         )
     assert not lock_path(project).exists()
+
+
+def test_project_writer_lock_rejects_a_second_process(tmp_path: Path):
+    project = tmp_path / "book"
+    with project_writer_lock(project):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from pathlib import Path\n"
+                    "from audiobook_harness.project_lock import project_writer_lock\n"
+                    f"with project_writer_lock(Path({str(project)!r})): pass"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+        )
+    assert result.returncode != 0
+    assert "locked" in result.stderr.lower()
