@@ -17,22 +17,23 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="audiobook-harness-fixture-") as directory:
         project = Path(directory) / "fixture"
         shutil.copytree(template, project)
-        result = subprocess.run(
-            [sys.executable, "-m", "audiobook_harness.cli", "analyze", str(project)],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode:
-            print(result.stderr, file=sys.stderr, end="")
-            return result.returncode
+        for command in ("analyze", "pipeline-audit", "compatibility-audit"):
+            result = subprocess.run(
+                [sys.executable, "-m", "audiobook_harness.cli", command, str(project)],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode:
+                print(result.stderr, file=sys.stderr, end="")
+                return result.returncode
         report = json.loads(
             (project / "production/analysis.json").read_text(encoding="utf-8")
         )
         assert report["project"] == "Untitled audiobook"
         assert report["chapters"][0]["units"]
-        print("fixture analysis passed")
+        print("fixture deterministic core passed")
     return 0
 
 

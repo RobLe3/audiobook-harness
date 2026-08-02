@@ -13,4 +13,4 @@ def test_model_free_fixture_script_runs_from_checkout():
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert "fixture analysis passed" in result.stdout
+    assert "fixture deterministic core passed" in result.stdout

@@ -71,6 +71,7 @@ def verification_commands(
         uv = shutil.which("uv")
         if uv:
             commands.append(("lock", [uv, "lock", "--check"], False))
+        commands.append(("provenance", [str(python), "scripts/audit-provenance.py"], True))
     return commands
 
 

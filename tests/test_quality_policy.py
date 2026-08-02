@@ -86,6 +86,24 @@ def test_public_quality_fixture_corpus_matches_policy():
         assert classify_quality_report(evidence)["disposition"] == case["expected"]
 
 
+def test_public_quality_fixture_corpus_covers_every_disposition_and_gate_category():
+    path = Path(__file__).parent / "fixtures/quality-gates.json"
+    corpus = json.loads(path.read_text(encoding="utf-8"))
+    assert {"pass", "automatic_repair", "review_required", "blocked"} <= {
+        row["expected"] for row in corpus["cases"]
+    }
+    assert {
+        "transcription",
+        "pronunciation",
+        "spoken-form",
+        "alignment",
+        "timing",
+        "acoustics",
+        "encoding",
+        "metadata",
+    } <= {row["category"] for row in corpus["cases"]}
+
+
 def _signal_from_corpus_case(case: dict[str, object]) -> np.ndarray:
     signal = case["signal"]
     assert isinstance(signal, dict)

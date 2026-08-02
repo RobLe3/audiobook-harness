@@ -6,11 +6,11 @@ contact cloud services, or publish media.
 
 | Issue | Required profile | Close only when |
 | --- | --- | --- |
-| #2 transaction integrity | `integrity` | Injected failures preserve prior state; no partial receipt or promotion validates. Remaining: full artifact/validation/receipt and concurrent-invocation matrix. |
+| #2 transaction integrity | `integrity` | Injected failures preserve prior state; no partial receipt or promotion validates. |
 | #4 quality corpus | `quality` | Every gate has original/CC0 positive and negative fixtures. |
 | #5 quality policy | `quality` | Policy changes are versioned, evidence-bound, repeatable, and never approve listener judgement. |
 | #6 supply chain | `supply-chain` | Lock, package, model, and binary provenance checks are deterministic. |
-| #8 filesystem safety | `filesystem` | Concurrency and path/cleanup failure behavior is safe and documented. Remaining: platform-specific characterization and concurrent repair/promotion matrix. |
+| #8 filesystem safety | `filesystem` | Concurrency and path/cleanup failure behavior is safe and documented. |
 | #9 maintainability | `release` | Characterization and full compatibility checks pass after each extraction. |
 | #10 operations/security | `operations` | Diagnostics and verified reporting instructions are tested and documented. |
 | #11 external readiness | `supply-chain` | Fixture, compatibility, migration, and maturity documentation are complete. |

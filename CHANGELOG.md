@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- Complete the public hardening evidence set: offline provenance audit,
+  redistributable fixture, documented diagnostics and private security process.
+- Extend the quality corpus coverage contract and local issue-scoped verifier.
+
 ## 0.5.8
 
 - Add an HTTP regression test proving the Review Center rejects a review-draft

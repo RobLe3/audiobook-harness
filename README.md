@@ -1,8 +1,11 @@
 # Audiobook Harness
 
-Current release: **0.5.8**. Audiobook Harness uses one SemVer product identity;
+Current release: **0.6.0**. Audiobook Harness uses one SemVer product identity;
 project names and profile hashes do not create a second harness version. See
 [versioning and compatibility](docs/VERSIONING.md).
+
+See the [external reproducibility guide](docs/EXTERNAL_REPRODUCIBILITY.md),
+[operations guide](docs/OPERATIONS.md), and [issue closure evidence](docs/ISSUE_CLOSURE.md).
 
 ## Maturity and support boundary
 
@@ -21,7 +24,7 @@ It focuses on manuscript analysis, pronunciation control, contextual dialogue,
 Kokoro TTS, dual-checkpoint local Whisper verification, forced alignment, and reproducible
 M4A/MP3 delivery with staged promotion.
 
-Version 0.5.8 executes all eight phases as receipt-last transactions. Each
+Version 0.6.0 executes all eight phases as receipt-last transactions. Each
 phase has its own dependency identity, success predicates, retry policy, and
 structured result. A small harness or review-server change therefore cannot
 invalidate unrelated audio work. Failed implementation attempts roll back
@@ -269,7 +272,7 @@ See [the local interactive walkthrough instructions](docs/assets/README.md).
 
 ## v0.5 review gate
 
-Version 0.5.8 writes source-preserving analysis contracts for structure, spoken
+Version 0.6.0 writes source-preserving analysis contracts for structure, spoken
 forms, dialogue, prosody and TTS risk. After staging, run
 `audiobook-harness review PROJECT`; the loopback service saves review drafts
 directly under `production/`. Finalize decisions in the panel or with
@@ -281,7 +284,7 @@ and the documented repetition or editorial-authority threshold. Existing
 projects can inspect an upgrade with `audiobook-harness upgrade-project
 PROJECT`; applying it requires the reported inventory hash.
 
-Version 0.5.8 also exposes the production contract directly:
+Version 0.6.0 also exposes the production contract directly:
 
 ```bash
 audiobook-harness pipeline-audit PROJECT

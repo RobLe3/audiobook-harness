@@ -98,6 +98,7 @@ PHASES = (
         (
             "quality.py",
             "quality_policy.py",
+            "quality_acoustics.py",
             "selection_integrity.py",
             "asr_cache.py",
             "repair_analysis.py",

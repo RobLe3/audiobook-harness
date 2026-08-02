@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes Audiobook Harness **0.5.8**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.6.0**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 ## Performance and render lineage
 
-Version 0.5.8 treats the clean performed speech as the immutable take. Channel,
+Version 0.6.0 treats the clean performed speech as the immutable take. Channel,
 codec, mastering, and presentation renders are derived identities whose hashes
 name their parent take and processor contract. Listener decisions can therefore
 remain attached to unchanged performances while a derived render is rebuilt.
@@ -27,6 +27,11 @@ The harness owns one eight-phase graph: analysis, synthesis, candidate
 realization, cue QA, pre-mix gating, assembly, post-mix QA, and packaging.
 Projects supply source, reviewed vocabulary, performance policy, and optional
 extensions. They do not fork the harness identity.
+
+The CLI owns argument parsing and structured operator output. Pure acoustic
+calculations live in `quality_acoustics.py`; quality orchestration owns ASR,
+alignment, repair evidence, and report composition. This boundary keeps the
+acoustic policy independently testable while phase identity binds both modules.
 
 `feature-parity.json` is the conformance index. Core narration and review
 capabilities are required. Communication processing, soundscapes, music,
