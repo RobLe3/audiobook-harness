@@ -4,6 +4,15 @@ Each public issue closes only after its acceptance criteria, focused local
 profile, and full release verification pass. Profiles do not download models,
 contact cloud services, or publish media.
 
+## Issue-zero maintenance
+
+New defects use `.github/ISSUE_TEMPLATE/hardening.md`. Every issue needs a
+reproduction, affected contract, bounded risk/scope, a named local verification
+profile, and a closure release. Run `python scripts/audit-issues.py` before a
+maintenance release to report incomplete open issues without changing GitHub.
+The audit is read-only; issue creation, comments, and closure remain deliberate
+maintainer actions.
+
 | Issue | Required profile | Close only when |
 | --- | --- | --- |
 | #2 transaction integrity | `integrity` | Injected failures preserve prior state; no partial receipt or promotion validates. |

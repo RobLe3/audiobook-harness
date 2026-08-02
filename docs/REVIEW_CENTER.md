@@ -1,7 +1,7 @@
 # Review Center
 
 The Review Center is the local, project-agnostic listener-review surface for
-Audiobook Harness 0.6.0. It is a convenience interface over the existing
+Audiobook Harness 0.6.1. It is a convenience interface over the existing
 hash-bound review contract; it is not publication authority.
 
 ## Configure projects

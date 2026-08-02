@@ -1,6 +1,6 @@
 # Versioning and legacy compatibility
 
-Audiobook Harness **0.6.0** is the current product release. It adds
+Audiobook Harness **0.6.1** is the current product release. It adds
 single-writer protection for every review-state mutation, including Review
 Center requests. Policy-owned acoustic thresholds and deterministic CC0/original
 signal corpus coverage remain in force. The existing direct-packaging lock coverage, cue-QA policy identity,
@@ -16,7 +16,7 @@ and strict hash-bound verification remain mandatory.
 Product releases use SemVer and are independent of report-schema integers,
 dependency versions, and local model or asset revisions.
 
-The supported maturity claim for 0.6.0 is controlled maintainer-operated local
+The supported maturity claim for 0.6.1 is controlled maintainer-operated local
 production. Unattended production, multi-user coordination, stable public API
 compatibility, and third-party operational support remain future goals rather
 than promises of this release.
@@ -24,7 +24,7 @@ than promises of this release.
 Project-specific audiobook names and historic build labels are not harness product releases.
 Historical pre-SemVer project artifacts remain immutable and reusable through
 their hashes, but their former project-local labels are not exposed as current
-product versions. New reports identify the product as `0.6.0` and bind the
+product versions. New reports identify the product as `0.6.1` and bind the
 project configuration through `project_profile_sha256`.
 
 Run `audiobook-harness compatibility-audit PROJECT` to inspect a receipt without writing it. Add `--apply` to store `production/version-compatibility-receipt.json`. The receipt hashes existing analysis, candidate, verification, and alignment evidence without rewriting those artifacts or their historical receipts. Missing or changed evidence is never silently accepted.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- Add a read-only issue-hygiene audit and a bounded hardening issue template to
+  keep future maintenance work reproducible and closure-oriented.
+
 ## 0.6.0
 
 - Complete the public hardening evidence set: offline provenance audit,
