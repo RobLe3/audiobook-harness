@@ -594,8 +594,7 @@ def _validated_ordered_takes(
 
 def _prepare_stage_directory(project: Path, output: Path | None) -> Path:
     requested = output or project / "staging"
-    if requested.is_symlink():
-        raise RuntimeError("Cannot stage into a symbolic link")
+    _require_non_symlink_stage_path(requested)
     root = requested.resolve()
     project = project.resolve()
     protected = {
@@ -629,6 +628,20 @@ def _prepare_stage_directory(project: Path, output: Path | None) -> Path:
         {"version": 1, "owner": "audiobook-harness", "project": str(project)},
     )
     return root
+
+
+def _require_non_symlink_stage_path(path: Path) -> None:
+    """Reject a stage path with any existing symbolic-link component.
+
+    Staging and promotion may remove or replace owned directories.  Resolving a
+    supplied path first would silently turn a symlinked request into work on
+    its target, which is unsafe even when the target is empty.  The harness
+    deliberately accepts only direct filesystem paths for these destructive
+    operations.
+    """
+    absolute = path.absolute()
+    if any(component.is_symlink() for component in (absolute, *absolute.parents)):
+        raise RuntimeError("Cannot stage into a symbolic link path")
 
 
 def _stage_into(
@@ -777,7 +790,9 @@ def stage(
     reuse_verified_phases: bool = False,
 ) -> dict[str, Any]:
     """Build a complete stage beside the target and replace it only on success."""
-    target = (output or project / "staging").resolve()
+    requested = output or project / "staging"
+    _require_non_symlink_stage_path(requested)
+    target = requested.resolve()
     temporary = target.with_name(f".{target.name}.phase-8-{os.getpid()}")
     if temporary.exists():
         shutil.rmtree(temporary)
@@ -880,7 +895,12 @@ def _probe_audio(path: Path) -> dict[str, Any]:
 
 def stage_manifest_is_valid(project: Path, stage_directory: Path | None = None) -> bool:
     paths = project_paths(project)
-    stage_root = (stage_directory or project / "staging").resolve()
+    requested = stage_directory or project / "staging"
+    try:
+        _require_non_symlink_stage_path(requested)
+    except RuntimeError:
+        return False
+    stage_root = requested.resolve()
     try:
         manifest = json.loads(
             (stage_root / "stage-manifest.json").read_text(encoding="utf-8")
@@ -936,7 +956,9 @@ def _safe_stage_name(value: object) -> bool:
 
 def promote(project: Path, stage_directory: Path | None = None) -> dict[str, Any]:
     paths = project_paths(project)
-    stage_root = (stage_directory or project / "staging").resolve()
+    requested = stage_directory or project / "staging"
+    _require_non_symlink_stage_path(requested)
+    stage_root = requested.resolve()
     manifest = json.loads((stage_root / "stage-manifest.json").read_text())
     verification = json.loads((paths["production"] / "verification.json").read_text())
     if not verification.get("ok") or manifest.get("verification_sha256") != sha256(

@@ -1,7 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from audiobook_harness.analysis import analyze
+import audiobook_harness.project as project_module
 from audiobook_harness.project import (
     normalized_words,
     performance_units,
@@ -31,6 +34,25 @@ def test_write_json_replaces_atomically_and_leaves_valid_json(tmp_path: Path):
 
     write_json(path, {"state": "complete", "step": 8})
     assert json.loads(path.read_text()) == {"state": "complete", "step": 8}
+    assert list(path.parent.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_write_json_replace_failure_preserves_previous_complete_document(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    path = tmp_path / "production" / "state.json"
+    write_json(path, {"state": "approved"})
+    original_replace = project_module.os.replace
+
+    def fail_replace(source: str, target: str) -> None:
+        if Path(target) == path:
+            raise OSError("simulated disk interruption")
+        original_replace(source, target)
+
+    monkeypatch.setattr(project_module.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="disk interruption"):
+        write_json(path, {"state": "partial"})
+    assert json.loads(path.read_text()) == {"state": "approved"}
     assert list(path.parent.glob(f".{path.name}.*.tmp")) == []
 
 

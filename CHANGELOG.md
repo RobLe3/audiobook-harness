@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.3
+
+- Add issue-scoped, offline verification profiles and a public closure-evidence
+  map so maintenance work is reproducible without a hosted workflow.
+- Preserve receipt-last phase commits when operational status persistence fails;
+  a failed status write cannot leave a reusable success receipt behind.
+- Exercise atomic JSON replacement under a simulated interruption and reject
+  staging or promotion through any symbolic-link path component.
+
 ## 0.5.2
 
 - Redirect the loopback Review Center root to its project-agnostic chooser so

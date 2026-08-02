@@ -120,6 +120,41 @@ def _validate_outputs(project: Path, phase: Phase) -> None:
             )
 
 
+def _record_failure_state(
+    production: Path,
+    journal: Path,
+    *,
+    phase: Phase,
+    input_identity: str,
+    result: PhaseResult,
+) -> None:
+    """Best-effort diagnostics after authoritative state has failed closed.
+
+    Receipt invalidation and owned-artifact restoration are the integrity
+    boundary.  A full disk or an unavailable filesystem must not hide the
+    original failure behind a second error while attempting to update status
+    or append an operator-facing event.  Those diagnostics are deliberately
+    non-authoritative: a phase is reusable only when its receipt is present
+    and hash-valid.
+    """
+    try:
+        write_json(production / "phase-result.json", asdict(result))
+    except OSError:
+        pass
+    try:
+        append_event(
+            journal,
+            {
+                "event": "phase_failed",
+                "phase": phase.number,
+                "input_identity": input_identity,
+                "result": asdict(result),
+            },
+        )
+    except OSError:
+        pass
+
+
 def execute_phase(
     project: Path,
     *,
@@ -159,22 +194,26 @@ def execute_phase(
             phase.number,
             evidence=tuple(f"production/{name}" for name in phase.required_artifacts),
         )
+        # The phase result is operational status, while the receipt is the
+        # authoritative, hash-bound completion claim.  Write every mutable
+        # prerequisite before the receipt so no fallible work remains after a
+        # success receipt has been committed.
+        write_json(production / "phase-result.json", asdict(result))
+        append_event(
+            journal,
+            {
+                "event": "phase_validated",
+                "phase": phase.number,
+                "input_identity": input_identity,
+                "result": asdict(result),
+            },
+        )
         write_phase_receipt(
             project,
             step=phase.number,
             input_identity=input_identity,
             artifacts=owned,
             success_predicates=phase.success_predicates,
-        )
-        write_json(production / "phase-result.json", asdict(result))
-        append_event(
-            journal,
-            {
-                "event": "phase_committed",
-                "phase": phase.number,
-                "input_identity": input_identity,
-                "result": asdict(result),
-            },
         )
         return value, result
     except BaseException as error:
@@ -184,15 +223,12 @@ def execute_phase(
                 path.unlink(missing_ok=True)
                 if path in existed:
                     shutil.copy2(existed[path], path)
-        write_json(production / "phase-result.json", asdict(result))
-        append_event(
+        _record_failure_state(
+            production,
             journal,
-            {
-                "event": "phase_failed",
-                "phase": phase.number,
-                "input_identity": input_identity,
-                "result": asdict(result),
-            },
+            phase=phase,
+            input_identity=input_identity,
+            result=result,
         )
         raise PhaseExecutionError(result) from error
     finally:

@@ -154,7 +154,7 @@ def _verified_stage(
     (project / "production/stage-manifest.json").write_text(json.dumps(manifest))
     review = build_review(project, stage)
     assert review["version"] == 3
-    assert review["audiobook_harness_version"] == "0.5.2"
+    assert review["audiobook_harness_version"] == "0.5.3"
     finalize_review(
         project, [{"id": row["id"], "decision": "approve"} for row in review["items"]]
     )
@@ -308,6 +308,20 @@ def test_staging_refuses_unrelated_nonempty_and_dangerous_directories(tmp_path: 
     with pytest.raises(RuntimeError, match="Unsafe"):
         _prepare_stage_directory(project, project)
     assert (unrelated / "keep.txt").read_text() == "keep"
+
+
+def test_staging_refuses_a_symbolic_linked_output_path(tmp_path: Path):
+    template = Path(__file__).parents[1] / "templates/project"
+    project = tmp_path / "book"
+    scaffold(project, template)
+    target = tmp_path / "actual-stage"
+    target.mkdir()
+    linked = tmp_path / "linked-stage"
+    linked.symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(RuntimeError, match="symbolic link"):
+        tts.stage(project, linked)
+    assert list(target.iterdir()) == []
 
 
 def test_staging_replaces_only_same_project_owned_directory(tmp_path: Path):

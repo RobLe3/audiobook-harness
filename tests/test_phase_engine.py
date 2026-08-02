@@ -96,6 +96,41 @@ def test_receipt_write_failure_rolls_back_owned_artifacts(
     assert not (production / "phase-receipts/step-2.json").exists()
 
 
+def test_status_write_failure_cannot_leave_a_success_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Receipt-last ordering prevents a half-committed success claim."""
+    production = tmp_path / "production"
+    production.mkdir()
+    artifact = production / "owned.json"
+    artifact.write_text('{"version":"approved"}')
+    phase = Phase(2, "test", (1,), ("owned.json",))
+    original_write_json = phase_engine.write_json
+
+    def fail_only_success_status(path: Path, value: object) -> None:
+        if (
+            path.name == "phase-result.json"
+            and getattr(value, "get", lambda *_: None)("status") == "passed"
+        ):
+            raise OSError("simulated status interruption")
+        original_write_json(path, value)
+
+    monkeypatch.setattr(phase_engine, "write_json", fail_only_success_status)
+    with pytest.raises(PhaseExecutionError) as raised:
+        execute_phase(
+            tmp_path,
+            phase=phase,
+            input_identity="new",
+            action=lambda: artifact.write_text('{"version":"partial"}'),
+        )
+    assert raised.value.result.status == "implementation_failure"
+    assert json.loads(artifact.read_text()) == {"version": "approved"}
+    assert not (production / "phase-receipts/step-2.json").exists()
+    assert json.loads((production / "phase-result.json").read_text())["status"] == (
+        "implementation_failure"
+    )
+
+
 def test_failure_classification_is_typed() -> None:
     phase = Phase(2, "synthesis", (1,), ("candidates.json",))
     transient = classify_failure(phase, TimeoutError("slow tool"))
