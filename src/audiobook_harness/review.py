@@ -24,6 +24,42 @@ def _canonical(value: object) -> str:
     ).hexdigest()
 
 
+EVIDENCE_KEYS: dict[str, tuple[str, ...]] = {
+    "spoken_form": ("primary_wer", "secondary_wer"),
+    "pause": ("prosody",),
+    "pronunciation": ("primary_wer", "secondary_wer"),
+    "mix_or_loudness": ("energy",),
+    "performance": ("prosody", "energy"),
+    "speaker_or_mode": ("speaker", "energy"),
+    "stretch_or_timing": ("prosody",),
+    "other": (),
+}
+
+
+def item_evidence(item: dict[str, Any], category: str | None = None) -> dict[str, Any]:
+    """Summarize existing manifest evidence without approving a performance."""
+    machine = item.get("machine_evidence", {})
+    machine = machine if isinstance(machine, dict) else {}
+    selected = category or "other"
+    keys = EVIDENCE_KEYS.get(selected, ())
+    if not keys:
+        status, confidence, explanation = "manual_only", "low", "This category requires listener judgement."
+    else:
+        present = [key for key in keys if machine.get(key) not in (None, "")]
+        status = "pass" if len(present) == len(keys) else "inconclusive"
+        confidence = "medium" if status == "pass" else "low"
+        explanation = "All registered evidence is present; listener judgement may still be required." if status == "pass" else "Required evidence is missing or inconclusive."
+    return {
+        "item": str(item.get("id", "")),
+        "category": selected,
+        "status": status,
+        "confidence": confidence,
+        "evidence_keys": list(keys),
+        "explanation": explanation,
+        "audio_sha256": item.get("audio_sha256"),
+    }
+
+
 def review_item_identity(item: dict[str, Any]) -> str:
     """Bind a decision to one review item, not to the surrounding page."""
 
@@ -489,6 +525,17 @@ def review_status(project: Path) -> dict[str, Any]:
     current = manifest.get("review_identity_sha256")
     authoritative = decisions.get("review_identity_sha256")
     draft_identity = draft.get("review_identity_sha256")
+    decisions_by_id = {
+        str(row.get("id")): row
+        for row in decisions.get("decisions", [])
+        if isinstance(row, dict) and row.get("id")
+    }
+    pending_items = []
+    for item in manifest.get("items", []):
+        item_id = str(item.get("id", ""))
+        decision = decisions_by_id.get(item_id, {})
+        if decision.get("decision") != "approve":
+            pending_items.append(item_evidence(item, str(decision.get("defect_category") or "other")))
     state = str(run.get("state", "not_started"))
     if state == "running" and owner == "active":
         action = "wait_for_generation"
@@ -531,6 +578,7 @@ def review_status(project: Path) -> dict[str, Any]:
         "draft_matches_current_identity": bool(current and draft_identity == current),
         "review_available": bool(current),
         "reviewer_action": {"code": action, "enabled": enabled},
+        "review_evidence": pending_items,
         "review_processing": read("review-processing-receipt.json"),
         "next_steps": [
             {
