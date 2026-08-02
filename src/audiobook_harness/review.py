@@ -398,7 +398,45 @@ def finalize_review(project: Path, decisions: list[dict[str, Any]]) -> dict[str,
             ),
         )
     report["feedback"] = compile_feedback(project)
+    report["review_processing"] = _write_review_processing_receipt(
+        project, manifest, report
+    )
     return report
+
+
+def _write_review_processing_receipt(
+    project: Path, manifest: dict[str, Any], report: dict[str, Any]
+) -> dict[str, Any]:
+    """Persist idempotent post-review state without granting release authority."""
+
+    decisions = [row for row in report.get("decisions", []) if isinstance(row, dict)]
+    addressed = sorted(str(row["id"]) for row in decisions if row.get("decision") == "approve")
+    pending = sorted(
+        str(row["id"])
+        for row in decisions
+        if row.get("decision") in {"reject", "uncertain"}
+    )
+    key = _canonical(
+        {
+            "project_profile_sha256": report.get("project_profile_sha256"),
+            "review_identity_sha256": manifest.get("review_identity_sha256"),
+            "decisions_sha256": report.get("decisions_sha256"),
+        }
+    )
+    receipt = {
+        "version": 1,
+        "idempotency_key": key,
+        "review_identity_sha256": manifest.get("review_identity_sha256"),
+        "decisions_sha256": report.get("decisions_sha256"),
+        "state": "complete" if not pending else "repair_queued",
+        "addressed_items": addressed,
+        "pending_items": pending,
+        "next_action": "continue_with_next_project" if not pending else "wait_for_repair",
+        "authority": "derived_from_hash_bound_review_records",
+    }
+    receipt["identity_sha256"] = _canonical(receipt)
+    write_json(project / "production/review-processing-receipt.json", receipt)
+    return receipt
 
 
 def review_is_approved(project: Path) -> bool:
@@ -493,6 +531,16 @@ def review_status(project: Path) -> dict[str, Any]:
         "draft_matches_current_identity": bool(current and draft_identity == current),
         "review_available": bool(current),
         "reviewer_action": {"code": action, "enabled": enabled},
+        "review_processing": read("review-processing-receipt.json"),
+        "next_steps": [
+            {
+                "code": "review" if enabled else "processing",
+                "label": "Review and finalize this project" if enabled else "Continue automatic processing",
+                "detail": "Finalize the current decisions; independent projects remain available."
+                if enabled
+                else "The finalized review is recorded and its follow-up work is being reconciled.",
+            }
+        ],
         "phase_result": phase_result
         if phase_result
         else {
