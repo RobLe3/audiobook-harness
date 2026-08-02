@@ -4,6 +4,14 @@ Current release: **0.5.1**. Audiobook Harness uses one SemVer product identity;
 project names and profile hashes do not create a second harness version. See
 [versioning and compatibility](docs/VERSIONING.md).
 
+## Maturity and support boundary
+
+This release targets controlled, maintainer-operated local production. The
+deterministic core is testable from a clean checkout, but unattended
+multi-user operation, stable public Python API compatibility, and third-party
+operational support are not yet guarantees. Review, staging, and promotion
+remain explicit boundaries.
+
 The hash-bound outstanding-work model separates automatic repair, current
 verification, cross-episode dependencies, focused listener review, completion,
 and fatal implementation faults. Automatic work always precedes review.

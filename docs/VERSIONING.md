@@ -12,6 +12,11 @@ and strict hash-bound verification remain mandatory.
 Product releases use SemVer and are independent of report-schema integers,
 dependency versions, and local model or asset revisions.
 
+The supported maturity claim for 0.5.1 is controlled maintainer-operated local
+production. Unattended production, multi-user coordination, stable public API
+compatibility, and third-party operational support remain future goals rather
+than promises of this release.
+
 Project-specific audiobook names and historic build labels are not harness product releases.
 Historical pre-SemVer project artifacts remain immutable and reusable through
 their hashes, but their former project-local labels are not exposed as current
