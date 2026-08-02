@@ -55,5 +55,6 @@ def test_public_quality_fixture_corpus_matches_policy():
     path = Path(__file__).parent / "fixtures/quality-gates.json"
     corpus = json.loads(path.read_text(encoding="utf-8"))
     for case in corpus["cases"]:
+        assert case["category"]
         evidence = {"ok": case["expected"] == "pass", **case.get("evidence", {})}
         assert classify_quality_report(evidence)["disposition"] == case["expected"]

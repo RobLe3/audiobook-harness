@@ -3,11 +3,16 @@
   "license": "CC0-1.0",
   "purpose": "Small original, text-only quality-policy regression corpus.",
   "cases": [
-    {"id": "exact-pass", "input": "The signal is clear.", "expected": "pass"},
-    {"id": "skipped-word", "input": "The signal is clear.", "evidence": {"failures": ["u1"]}, "expected": "automatic_repair"},
-    {"id": "reviewed-term-missing", "input": "The signal is clear.", "evidence": {"lexicon": {"ok": false}}, "expected": "review_required"},
-    {"id": "alignment-missing", "input": "The signal is clear.", "evidence": {"lexicon": {"ok": true}, "forced_alignment": {"ok": false}}, "expected": "blocked"},
-    {"id": "encoded-deliverable-invalid", "input": "The signal is clear.", "evidence": {"encoding": {"ok": false}}, "expected": "blocked"},
-    {"id": "non-repairable-acoustic-defect", "input": "The signal is clear.", "evidence": {"acoustic": {"ok": false, "repairable": false}}, "expected": "blocked"}
+    {"id": "exact-pass", "category": "text", "input": "The signal is clear.", "expected": "pass"},
+    {"id": "skipped-word", "category": "transcription", "input": "The signal is clear.", "evidence": {"failures": ["u1"]}, "expected": "automatic_repair"},
+    {"id": "repeated-word", "category": "transcription", "input": "The signal is clear.", "evidence": {"failures": ["u1"]}, "expected": "automatic_repair"},
+    {"id": "pronunciation-ambiguity", "category": "pronunciation", "input": "The bass is clear.", "evidence": {"lexicon": {"ok": false}}, "expected": "review_required"},
+    {"id": "reviewed-term-missing", "category": "spoken-form", "input": "The signal is clear.", "evidence": {"lexicon": {"ok": false}}, "expected": "review_required"},
+    {"id": "alignment-missing", "category": "alignment", "input": "The signal is clear.", "evidence": {"lexicon": {"ok": true}, "forced_alignment": {"ok": false}}, "expected": "blocked"},
+    {"id": "timing-failure", "category": "timing", "input": "The signal is clear.", "evidence": {"failures": ["word-duration"]}, "expected": "automatic_repair"},
+    {"id": "clipping-failure", "category": "acoustics", "input": "The signal is clear.", "evidence": {"acoustic": {"ok": false, "repairable": true}}, "expected": "review_required"},
+    {"id": "encoded-deliverable-invalid", "category": "encoding", "input": "The signal is clear.", "evidence": {"encoding": {"ok": false}}, "expected": "blocked"},
+    {"id": "metadata-invalid", "category": "metadata", "input": "The signal is clear.", "evidence": {"encoding": {"ok": false}}, "expected": "blocked"},
+    {"id": "non-repairable-acoustic-defect", "category": "acoustics", "input": "The signal is clear.", "evidence": {"acoustic": {"ok": false, "repairable": false}}, "expected": "blocked"}
   ]
 }

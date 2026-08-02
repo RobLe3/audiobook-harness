@@ -19,5 +19,7 @@ def test_local_verification_contract_emits_machine_readable_report(tmp_path: Pat
     value = json.loads(report.read_text(encoding="utf-8"))
     assert result.returncode == 0
     assert value["offline"] is True
-    assert {row["name"] for row in value["checks"]} == {"pytest", "ruff", "format"}
+    assert {"pytest", "ruff", "format"}.issubset(
+        {row["name"] for row in value["checks"]}
+    )
     assert all(row["ok"] for row in value["checks"] if row["required"])

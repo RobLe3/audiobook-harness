@@ -8,6 +8,11 @@ For a reproducible development environment, use the committed lockfile:
 uv sync --frozen --extra dev
 ```
 
+When `uv` is installed, the local verification report also runs `uv lock
+--check` to detect lockfile drift. The check is optional for environments that
+use the documented pip setup path; it never downloads models or production
+assets.
+
 The explicit setup script remains the supported path for installing optional
 local models and external tools.
 

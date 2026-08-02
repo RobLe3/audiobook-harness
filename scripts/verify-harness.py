@@ -7,6 +7,7 @@ import argparse
 import json
 import platform
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -31,6 +32,9 @@ def main() -> int:
             False,
         ),
     ]
+    uv = shutil.which("uv")
+    if uv:
+        commands.append(("lock", [uv, "lock", "--check"], False))
     checks = []
     for name, command, required in commands:
         result = subprocess.run(command, cwd=root, capture_output=True, text=True)
