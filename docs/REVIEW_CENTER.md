@@ -1,7 +1,7 @@
 # Review Center
 
 The Review Center is the local, project-agnostic listener-review surface for
-Audiobook Harness 0.5.1. It is a convenience interface over the existing
+Audiobook Harness 0.5.2. It is a convenience interface over the existing
 hash-bound review contract; it is not publication authority.
 
 ## Configure projects
@@ -47,6 +47,8 @@ idempotent rather than creating competing processes.
 
 ## Routes
 
+- `/` — redirects to the project chooser. Opening `http://127.0.0.1:8765/`
+  is therefore always a safe entry point.
 - `/review-center/` — project chooser.
 - `/review-center/<project-id>/` — listener review page.
 - `/review-center/<project-id>/api/status` — identity-safe review status.
@@ -56,6 +58,10 @@ idempotent rather than creating competing processes.
 
 Existing `audiobook-harness review PROJECT` remains available for a single
 project and is useful for a quick isolated review.
+
+Dashboard and API responses are served with `Cache-Control: no-store` so a
+local restart or project migration cannot leave the browser using a stale route
+contract. Review media remains served through the hash-bound project routes.
 
 ## Safe workflow
 

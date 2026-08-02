@@ -252,6 +252,20 @@ def write_stage_receipt(
     dependency_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     """Bind a packaged chapter to its verified report and exact output bytes."""
+    if not quality_report.is_file():
+        raise FileNotFoundError(f"stage quality report is missing: {quality_report}")
+    if not media:
+        raise ValueError("stage receipt requires at least one media artifact")
+    stage_root = media[0].parent.resolve()
+    names: set[str] = set()
+    for item in media:
+        if not item.is_file():
+            raise FileNotFoundError(f"stage media is missing: {item}")
+        if item.parent.resolve() != stage_root:
+            raise ValueError("stage media must share one direct stage directory")
+        if item.name in names:
+            raise ValueError(f"stage receipt has duplicate media name: {item.name}")
+        names.add(item.name)
     receipt = {
         "version": 1,
         "run_id": run_id,

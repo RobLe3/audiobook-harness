@@ -1,10 +1,11 @@
 # Quality contract
 
-This document describes Audiobook Harness **0.5.1**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
+This document describes Audiobook Harness **0.5.2**. Product versioning and artifact compatibility are defined in `docs/VERSIONING.md`.
 
 ## Transactional quality authority
 
-Objective policy outcomes are versioned (`POLICY_VERSION = 1`) and have fixed
+Objective policy outcomes are versioned (`POLICY_VERSION = 1`) and have a
+stable `policy_identity_sha256` in every result. They have fixed
 meanings: `pass` means every required objective gate passed; `automatic_repair`
 means bounded failed units have evidence for another strategy; `review_required`
 means pronunciation or other evidence is incomplete or ambiguous; and `blocked`

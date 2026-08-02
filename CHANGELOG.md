@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2
+
+- Redirect the loopback Review Center root to its project-agnostic chooser so
+  opening the local server never produces a generic 404 page.
+- Make stage-receipt creation fail closed for missing, duplicate, or mixed
+  directory media inputs; retain validation of receipt reuse as a second gate.
+- Bind every quality disposition to a stable policy-contract identity and
+  strengthen writer-lock teardown so a process cannot remove a replaced lease.
+
 ## 0.5.1
 
 - Align the public package, reports, agent contract, README, and compatibility

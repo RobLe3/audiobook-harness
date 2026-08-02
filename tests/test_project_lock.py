@@ -32,6 +32,19 @@ def test_project_writer_lock_removes_stale_owner(tmp_path: Path):
     assert not lock_path(project).exists()
 
 
+def test_project_writer_lock_does_not_remove_a_replaced_lease(tmp_path: Path):
+    project = tmp_path / "book"
+    with project_writer_lock(project):
+        (lock_path(project) / "owner.json").write_text(
+            json.dumps({"pid": os.getpid(), "token": "replacement"})
+        )
+    assert lock_path(project).is_dir()
+    assert (
+        json.loads((lock_path(project) / "owner.json").read_text())["token"]
+        == "replacement"
+    )
+
+
 def test_project_writer_lock_rejects_a_second_process(tmp_path: Path):
     project = tmp_path / "book"
     with project_writer_lock(project):

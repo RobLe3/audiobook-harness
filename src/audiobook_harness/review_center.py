@@ -70,6 +70,12 @@ def _send(
 ) -> None:
     handler.send_response(status)
     handler.send_header("Content-Type", content_type)
+    if content_type.startswith(("text/html", "application/json")):
+        handler.send_header("Cache-Control", "no-store, max-age=0")
+    else:
+        # Media is addressed through the current review identity and can be
+        # cached without retaining a stale dashboard or API route.
+        handler.send_header("Cache-Control", "private, max-age=86400")
     handler.send_header("Content-Length", str(len(payload)))
     handler.end_headers()
     handler.wfile.write(payload)
@@ -140,9 +146,14 @@ def chooser(projects: list[ReviewProject]) -> str:
     return f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Review Center</title><style>body{{font:16px system-ui;max-width:760px;margin:3rem auto;padding:24px;background:#0d1117;color:#edf3f8}}a{{color:#69a7d8}}li{{margin:1rem 0;padding:16px;background:#17202b;border:1px solid #334;border-radius:10px}}</style><h1>Review Center</h1><p>Choose a project to review.</p><ul>{cards}</ul>"""
 
 
-def serve_review_center(
+def create_review_center_server(
     workspace: Path, host: str, port: int, config: Path | None = None
-) -> None:
+) -> ThreadingHTTPServer:
+    """Build the loopback-only Review Center server without starting it.
+
+    Keeping construction separate from ``serve_forever`` makes route behavior
+    testable without launching an unmanaged background process.
+    """
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("Review Center is loopback-only")
     projects = load_projects(workspace, config)
@@ -163,6 +174,12 @@ def serve_review_center(
 
         def do_GET(self) -> None:
             parts = self.route_parts()
+            if not parts:
+                self.send_response(302)
+                self.send_header("Location", "/review-center/")
+                self.send_header("Cache-Control", "no-store, max-age=0")
+                self.end_headers()
+                return
             if parts == ["review-center"]:
                 _send(self, 200, "text/html; charset=utf-8", chooser(projects).encode())
                 return
@@ -274,6 +291,12 @@ def serve_review_center(
         def do_HEAD(self) -> None:
             """Mirror GET route availability without sending response bodies."""
             parts = self.route_parts()
+            if not parts:
+                self.send_response(302)
+                self.send_header("Location", "/review-center/")
+                self.send_header("Cache-Control", "no-store, max-age=0")
+                self.end_headers()
+                return
             if parts == ["review-center"]:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -385,7 +408,13 @@ def serve_review_center(
             except (ValueError, OSError, json.JSONDecodeError) as error:
                 _send_json(self, {"ok": False, "error": str(error)}, 400)
 
-    ThreadingHTTPServer((host, port), Handler).serve_forever()
+    return ThreadingHTTPServer((host, port), Handler)
+
+
+def serve_review_center(
+    workspace: Path, host: str, port: int, config: Path | None = None
+) -> None:
+    create_review_center_server(workspace, host, port, config).serve_forever()
 
 
 def _pid_path(workspace: Path, config: Path | None, port: int) -> Path:

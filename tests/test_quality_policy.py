@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from audiobook_harness.quality_policy import classify_quality_report
+from audiobook_harness.quality_policy import classify_quality_report, policy_identity
 
 
 def test_quality_policy_pass_is_objective_only():
@@ -9,6 +9,16 @@ def test_quality_policy_pass_is_objective_only():
     assert result["disposition"] == "pass"
     assert result["objective_authority"] is True
     assert result["subjective_approval_required"] is False
+    assert result["policy_identity_sha256"] == policy_identity()
+
+
+def test_quality_policy_identity_is_stable_for_equivalent_reports():
+    assert (
+        classify_quality_report({"ok": False, "failures": ["u1"]})[
+            "policy_identity_sha256"
+        ]
+        == policy_identity()
+    )
 
 
 def test_quality_policy_routes_failed_units_to_bounded_repair():
@@ -41,6 +51,11 @@ def test_quality_policy_blocks_missing_alignment():
 
 def test_quality_policy_blocks_invalid_encoded_deliverable():
     result = classify_quality_report({"ok": False, "encoding": {"ok": False}})
+    assert result["disposition"] == "blocked"
+
+
+def test_explicit_failed_evidence_overrides_an_inconsistent_pass_flag():
+    result = classify_quality_report({"ok": True, "encoding": {"ok": False}})
     assert result["disposition"] == "blocked"
 
 

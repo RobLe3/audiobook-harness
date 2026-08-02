@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from audiobook_harness.run_journal import (
     invalidate_phase_receipts_from,
     phase_receipt_is_valid,
@@ -142,23 +144,34 @@ def test_duplicate_stage_media_names_are_rejected(tmp_path: Path):
     report.write_text("{}")
     media = stage / "chapter.m4a"
     media.write_bytes(b"verified")
-    receipt = write_stage_receipt(
-        tmp_path / "receipt.json",
-        run_id="run",
-        chapter_id="01",
-        quality_report=report,
-        media=[media, media],
-        dependency_fingerprint="inputs",
-    )
-    assert not receipt_is_valid(
-        receipt,
-        run_id="run",
-        chapter_id="01",
-        stage=stage,
-        quality_report=report,
-        expected_names={media.name},
-        dependency_fingerprint="inputs",
-    )
+    with pytest.raises(ValueError, match="duplicate media name"):
+        write_stage_receipt(
+            tmp_path / "receipt.json",
+            run_id="run",
+            chapter_id="01",
+            quality_report=report,
+            media=[media, media],
+            dependency_fingerprint="inputs",
+        )
+
+
+def test_stage_receipt_rejects_media_from_multiple_directories(tmp_path: Path):
+    report = tmp_path / "quality.json"
+    report.write_text("{}")
+    primary = tmp_path / "stage/chapter.m4a"
+    primary.parent.mkdir()
+    primary.write_bytes(b"verified")
+    other = tmp_path / "other/chapter.mp3"
+    other.parent.mkdir()
+    other.write_bytes(b"verified")
+    with pytest.raises(ValueError, match="one direct stage directory"):
+        write_stage_receipt(
+            tmp_path / "receipt.json",
+            run_id="run",
+            chapter_id="01",
+            quality_report=report,
+            media=[primary, other],
+        )
 
 
 def test_phase_repair_receipt_is_objective_and_hash_bound(tmp_path: Path):

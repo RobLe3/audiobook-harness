@@ -1,7 +1,14 @@
 import json
+import http.client
+import threading
 from pathlib import Path
 
-from audiobook_harness.review_center import _pid_path, control, load_projects
+from audiobook_harness.review_center import (
+    _pid_path,
+    control,
+    create_review_center_server,
+    load_projects,
+)
 
 
 def test_load_projects_is_explicit_and_uses_project_titles(tmp_path: Path):
@@ -40,3 +47,28 @@ def test_review_center_start_is_idempotent_while_another_start_holds_lock(
     assert result["ok"]
     assert result["state"] == "starting"
     assert "already in progress" in result["detail"]
+
+
+def test_bare_review_center_host_redirects_to_project_chooser(tmp_path: Path):
+    project = tmp_path / "book"
+    project.mkdir()
+    (project / "project.yaml").write_text("title: Example Title\n", encoding="utf-8")
+    (tmp_path / "review-center.json").write_text(
+        json.dumps({"projects": [{"id": "book", "path": "book"}]}),
+        encoding="utf-8",
+    )
+    server = create_review_center_server(tmp_path, "127.0.0.1", 0)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("HEAD", "/")
+        response = connection.getresponse()
+        assert response.status == 302
+        assert response.getheader("Location") == "/review-center/"
+        assert response.getheader("Cache-Control") == "no-store, max-age=0"
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=2)
