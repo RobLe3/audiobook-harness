@@ -67,6 +67,14 @@ def automation_snapshot(project: Path) -> dict[str, Any]:
     identity = hashlib.sha256(
         json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+    operation = _read(production / "automation-operation.json")
+    terminal_same_evidence = (
+        operation.get("state") == "blocked"
+        and operation.get("input_identity") == identity
+    )
+    if terminal_same_evidence:
+        automatic = False
+        blocked_reason = str(operation.get("reason") or "automatic_repair_exhausted")
     return {
         "version": 1,
         "project": str(project),
@@ -76,10 +84,21 @@ def automation_snapshot(project: Path) -> dict[str, Any]:
         if blocked_reason
         else "review_or_complete",
         "automatic": automatic,
-        "reason": action or str(run.get("state") or "not_started"),
+        "reason": blocked_reason or action or str(run.get("state") or "not_started"),
         "blocked_reason": blocked_reason,
         "input_identity": identity,
         "run_state": run.get("state", "not_started"),
+        "workflow_state": (
+            "automatic_ready"
+            if automatic
+            else "repair_exhausted"
+            if terminal_same_evidence
+            else "review_ready"
+            if bool(status.get("reviewer_action", {}).get("enabled"))
+            else "blocked"
+            if blocked_reason
+            else "complete"
+        ),
     }
 
 
@@ -168,6 +187,7 @@ def converge_project(
                     "state": "blocked",
                     "reason": "automatic_repair_failed_without_new_evidence",
                     "iterations": iteration,
+                    "input_identity": identity,
                     "transitions": transitions,
                 }
                 write_json(operation_path, {**result, "owner_pid": os.getpid()})
@@ -178,6 +198,7 @@ def converge_project(
         "state": "blocked",
         "reason": "automatic_iteration_budget_exhausted",
         "iterations": maximum_iterations,
+        "input_identity": (transitions[-1]["input_identity"] if transitions else None),
         "transitions": transitions,
     }
     write_json(operation_path, {**result, "owner_pid": os.getpid()})

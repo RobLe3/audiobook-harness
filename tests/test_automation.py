@@ -80,3 +80,67 @@ def test_project_automation_uses_builtin_convergence_command(
     monkeypatch.setattr(review_center.subprocess, "Popen", lambda *a, **k: process)
     result = review_center.start_project_automation(configured)
     assert result == {"queued": True, "pid": 1234}
+
+
+def test_terminal_result_suppresses_unchanged_automatic_restart(
+    tmp_path: Path, monkeypatch
+):
+    project = _project(tmp_path)
+    monkeypatch.setattr(
+        automation,
+        "review_status",
+        lambda _project: {
+            "reviewer_action": {"code": "corrections_queued", "enabled": True}
+        },
+    )
+    first = automation.automation_snapshot(project)
+    (project / "production/automation-operation.json").write_text(
+        json.dumps(
+            {
+                "state": "blocked",
+                "reason": "automatic_repair_made_no_evidence_change",
+                "input_identity": first["input_identity"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    snapshot = automation.automation_snapshot(project)
+    assert snapshot["automatic"] is False
+    assert snapshot["workflow_state"] == "repair_exhausted"
+
+    configured = review_center.ReviewProject("book", project, "Book", True)
+    monkeypatch.setattr(
+        review_center.subprocess,
+        "Popen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("unchanged terminal work was restarted")
+        ),
+    )
+    result = review_center.start_project_automation(configured)
+    assert result["queued"] is False
+    assert result["reason"] == "automatic_repair_made_no_evidence_change"
+
+
+def test_new_evidence_reenables_automatic_work(tmp_path: Path, monkeypatch):
+    project = _project(tmp_path)
+    monkeypatch.setattr(
+        automation,
+        "review_status",
+        lambda _project: {"reviewer_action": {"code": "corrections_queued"}},
+    )
+    first = automation.automation_snapshot(project)
+    (project / "production/automation-operation.json").write_text(
+        json.dumps(
+            {
+                "state": "blocked",
+                "input_identity": first["input_identity"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (project / "production/repair-plan.json").write_text(
+        '{"new_evidence": true}', encoding="utf-8"
+    )
+    snapshot = automation.automation_snapshot(project)
+    assert snapshot["automatic"] is True
+    assert snapshot["workflow_state"] == "automatic_ready"

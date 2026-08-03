@@ -1,7 +1,7 @@
 # Review Center
 
 The Review Center is the local, project-agnostic listener-review surface for
-Audiobook Harness 0.7.0. It is not publication authority. When explicitly
+Audiobook Harness 0.7.1. It is not publication authority. When explicitly
 enabled, its server-owned monitor may start bounded convergence work without
 granting review approval or promotion authority.
 
@@ -58,6 +58,11 @@ monitor that starts `audiobook-harness converge PROJECT` whenever current review
 or phase evidence declares machine-actionable work. The worker reuses valid
 phase receipts, stops after a repeated evidence identity, and never promotes
 audio or fabricates review authority. GET and HEAD routes remain read-only.
+When the bounded ladder stops, its terminal input identity suppresses further
+dispatches until a review decision, repair plan, source, or other bound evidence
+changes. The status API reports controller execution and production outcome as
+separate fields, so `execution_state: blocked` or `succeeded` is never presented
+as proof that an audio repair passed.
 
 Use `audiobook-harness converge PROJECT --max-iterations 8` to run the same
 controller without Review Center. Missing source, configuration, or local model

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1
+
+- Stop the Review Center automation monitor from relaunching a terminal repair
+  when its evidence identity has not changed.
+- Report execution state, production outcome, and repair exhaustion separately
+  so a successful controller command cannot imply that an audio repair passed.
+
 ## 0.7.0
 
 - Add an opt-in, project-scoped convergence worker that starts with Review Center, resumes only evidence-bounded work, and stops for review, a no-progress identity, or its configured iteration budget.

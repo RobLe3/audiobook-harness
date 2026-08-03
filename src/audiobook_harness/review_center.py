@@ -156,7 +156,7 @@ function decisions(){{return [...document.querySelectorAll("section")].filter(s=
 let timer;document.addEventListener("input",()=>{{clearTimeout(timer);timer=setTimeout(async()=>{{const r=await fetch(base+"api/review-draft",{{method:"PUT",headers,body:JSON.stringify({{decisions:decisions()}})}});document.querySelector("#status").textContent=r.ok?"Saved locally.":"Save error."}},250)}});
 fetch(base+"api/review-draft").then(r=>r.json()).then(v=>{{for(const d of v.decisions||[]){{const s=document.querySelector(`section[data-id="${{CSS.escape(d.id)}}"]`);if(!s)continue;s.querySelector(".decision").value=d.decision||"";s.querySelector(".category").value=d.defect_category||"";s.querySelector(".note").value=d.note||""}}}});
 document.querySelector("#finalize").onclick=async()=>{{const r=await fetch(base+"api/finalize-review",{{method:"POST",headers,body:JSON.stringify({{decisions:decisions()}})}});const v=await r.json();document.querySelector("#status").textContent=v.ok?"Finalized and approved.":(v.error||"Finalize failed.")}};
-async function refresh(){{const r=await fetch(base+"api/status",{{cache:"no-store"}});if(!r.ok)return;const v=await r.json();const enabled=Boolean(v.reviewer_action?.enabled),automation=v.automation||{{}};document.querySelector("#finalize").disabled=!enabled;document.querySelectorAll("audio,select,input").forEach(x=>x.disabled=!enabled);document.querySelector("#status").textContent=automation.state==="running"?`Automatic repair is running${{automation.iteration?` · iteration ${{automation.iteration}}`:""}}.`:enabled?"Current review media is ready. Decisions save locally.":`Reviewer action: ${{v.reviewer_action?.code||"unavailable"}}`}}refresh();setInterval(refresh,5000);</script>"""
+async function refresh(){{const r=await fetch(base+"api/status",{{cache:"no-store"}});if(!r.ok)return;const v=await r.json();const enabled=Boolean(v.reviewer_action?.enabled),automation=v.automation||{{}};document.querySelector("#finalize").disabled=!enabled;document.querySelectorAll("audio,select,input").forEach(x=>x.disabled=!enabled);document.querySelector("#status").textContent=automation.state==="running"?`Automatic repair is running${{automation.iteration?` · iteration ${{automation.iteration}}`:""}}.`:automation.state==="blocked"?(enabled?"Automatic repair is exhausted for this evidence. Review the provisional media and submit feedback; nothing is published.":"Automatic repair is exhausted. New evidence or a focused decision is required."):enabled?"Current review media is ready. Decisions save locally.":`Reviewer action: ${{v.reviewer_action?.code||"unavailable"}}`}}refresh();setInterval(refresh,5000);</script>"""
 
 
 def chooser(projects: list[ReviewProject]) -> str:
@@ -224,6 +224,7 @@ def create_review_center_server(
                     return
                 if parts[2:] == ["api", "status"]:
                     status = review_status(project.root)
+                    snapshot = automation_snapshot(project.root)
                     operation = project.root / "production/automation-operation.json"
                     try:
                         automation = json.loads(operation.read_text(encoding="utf-8"))
@@ -231,7 +232,14 @@ def create_review_center_server(
                         automation = {"state": "idle"}
                     status["automation"] = {
                         "enabled": project.automation_enabled,
-                        "state": automation.get("state", "idle"),
+                        "state": (
+                            "blocked"
+                            if snapshot.get("workflow_state") == "repair_exhausted"
+                            else automation.get("state", "idle")
+                        ),
+                        "workflow_state": snapshot.get("workflow_state"),
+                        "execution_state": automation.get("state", "idle"),
+                        "outcome_state": snapshot.get("state"),
                         "iteration": automation.get("iteration")
                         or automation.get("iterations"),
                         "reason": automation.get("reason"),
