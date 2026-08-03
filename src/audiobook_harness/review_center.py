@@ -8,6 +8,7 @@ import secrets
 import subprocess
 import sys
 import tempfile
+import threading
 from dataclasses import dataclass
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from mimetypes import guess_type
@@ -18,6 +19,7 @@ from urllib.parse import quote, unquote, urlparse
 from .project import load_project, write_json
 from .project_lock import project_writer_lock
 from .review import build_review, finalize_review, review_status, validate_decisions
+from .automation import automation_snapshot
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,9 @@ class ReviewProject:
     project_id: str
     root: Path
     display_name: str
+    automation_enabled: bool = False
+    automation_poll_seconds: float = 5.0
+    automation_max_iterations: int = 8
 
 
 def load_projects(workspace: Path, config: Path | None = None) -> list[ReviewProject]:
@@ -52,7 +57,22 @@ def load_projects(workspace: Path, config: Path | None = None) -> list[ReviewPro
         display = str(entry.get("display_name") or project.get("title") or project_id)
         if any(item.project_id == project_id for item in projects):
             raise ValueError(f"Duplicate project id: {project_id}")
-        projects.append(ReviewProject(project_id, root, display))
+        automation = entry.get("automation", {})
+        automation = automation if isinstance(automation, dict) else {}
+        poll_seconds = float(automation.get("poll_seconds", 5.0))
+        max_iterations = int(automation.get("max_iterations", 8))
+        if poll_seconds < 0.25 or not 1 <= max_iterations <= 8:
+            raise ValueError(f"Invalid automation policy for {project_id}")
+        projects.append(
+            ReviewProject(
+                project_id,
+                root,
+                display,
+                bool(automation.get("enabled", False)),
+                poll_seconds,
+                max_iterations,
+            )
+        )
     return projects
 
 
@@ -136,7 +156,7 @@ function decisions(){{return [...document.querySelectorAll("section")].filter(s=
 let timer;document.addEventListener("input",()=>{{clearTimeout(timer);timer=setTimeout(async()=>{{const r=await fetch(base+"api/review-draft",{{method:"PUT",headers,body:JSON.stringify({{decisions:decisions()}})}});document.querySelector("#status").textContent=r.ok?"Saved locally.":"Save error."}},250)}});
 fetch(base+"api/review-draft").then(r=>r.json()).then(v=>{{for(const d of v.decisions||[]){{const s=document.querySelector(`section[data-id="${{CSS.escape(d.id)}}"]`);if(!s)continue;s.querySelector(".decision").value=d.decision||"";s.querySelector(".category").value=d.defect_category||"";s.querySelector(".note").value=d.note||""}}}});
 document.querySelector("#finalize").onclick=async()=>{{const r=await fetch(base+"api/finalize-review",{{method:"POST",headers,body:JSON.stringify({{decisions:decisions()}})}});const v=await r.json();document.querySelector("#status").textContent=v.ok?"Finalized and approved.":(v.error||"Finalize failed.")}};
-async function refresh(){{const r=await fetch(base+"api/status",{{cache:"no-store"}});if(!r.ok)return;const v=await r.json();const enabled=Boolean(v.reviewer_action?.enabled);document.querySelector("#finalize").disabled=!enabled;document.querySelectorAll("audio,select,input").forEach(x=>x.disabled=!enabled);document.querySelector("#status").textContent=enabled?"Current review media is ready. Decisions save locally.":`Reviewer action: ${{v.reviewer_action?.code||"unavailable"}}`}}refresh();setInterval(refresh,5000);</script>"""
+async function refresh(){{const r=await fetch(base+"api/status",{{cache:"no-store"}});if(!r.ok)return;const v=await r.json();const enabled=Boolean(v.reviewer_action?.enabled),automation=v.automation||{{}};document.querySelector("#finalize").disabled=!enabled;document.querySelectorAll("audio,select,input").forEach(x=>x.disabled=!enabled);document.querySelector("#status").textContent=automation.state==="running"?`Automatic repair is running${{automation.iteration?` · iteration ${{automation.iteration}}`:""}}.`:enabled?"Current review media is ready. Decisions save locally.":`Reviewer action: ${{v.reviewer_action?.code||"unavailable"}}`}}refresh();setInterval(refresh,5000);</script>"""
 
 
 def chooser(projects: list[ReviewProject]) -> str:
@@ -203,7 +223,21 @@ def create_review_center_server(
                     )
                     return
                 if parts[2:] == ["api", "status"]:
-                    _send_json(self, review_status(project.root))
+                    status = review_status(project.root)
+                    operation = project.root / "production/automation-operation.json"
+                    try:
+                        automation = json.loads(operation.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        automation = {"state": "idle"}
+                    status["automation"] = {
+                        "enabled": project.automation_enabled,
+                        "state": automation.get("state", "idle"),
+                        "iteration": automation.get("iteration")
+                        or automation.get("iterations"),
+                        "reason": automation.get("reason"),
+                        "owner_pid": automation.get("owner_pid"),
+                    }
+                    _send_json(self, status)
                     return
                 if parts[2:] == ["api", "review-manifest"]:
                     _send_json(self, build_review(project.root))
@@ -420,13 +454,101 @@ def create_review_center_server(
             except (ValueError, OSError, json.JSONDecodeError) as error:
                 _send_json(self, {"ok": False, "error": str(error)}, 400)
 
-    return ThreadingHTTPServer((host, port), Handler)
+    server = ThreadingHTTPServer((host, port), Handler)
+    server.review_projects = projects  # type: ignore[attr-defined]
+    return server
+
+
+def _automation_process_is_active(project: ReviewProject) -> bool:
+    operation = project.root / "production/automation-operation.json"
+    try:
+        value = json.loads(operation.read_text(encoding="utf-8"))
+        pid = int(value.get("owner_pid") or 0)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return False
+    if value.get("state") != "running" or pid <= 0:
+        return False
+    try:
+        command = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout
+    except OSError:
+        return False
+    return "audiobook_harness.cli" in command and "converge" in command
+
+
+def start_project_automation(project: ReviewProject) -> dict[str, Any]:
+    """Start one built-in convergence worker for an opted-in project."""
+
+    if not project.automation_enabled:
+        return {"queued": False, "reason": "automation_disabled"}
+    snapshot = automation_snapshot(project.root)
+    if not snapshot.get("automatic"):
+        return {"queued": False, "reason": snapshot.get("reason")}
+    if _automation_process_is_active(project):
+        return {"queued": False, "reason": "automation_already_active"}
+    command = [
+        sys.executable,
+        "-m",
+        "audiobook_harness.cli",
+        "converge",
+        str(project.root),
+        "--max-iterations",
+        str(project.automation_max_iterations),
+    ]
+    process = subprocess.Popen(
+        command,
+        cwd=project.root,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        close_fds=True,
+    )
+    return {"queued": True, "pid": process.pid}
+
+
+def start_automation_monitor(
+    projects: list[ReviewProject],
+) -> tuple[threading.Event, threading.Thread]:
+    stop = threading.Event()
+
+    def monitor() -> None:
+        while not stop.is_set():
+            intervals = []
+            for project in projects:
+                if not project.automation_enabled:
+                    continue
+                intervals.append(project.automation_poll_seconds)
+                try:
+                    start_project_automation(project)
+                except Exception:
+                    pass
+            stop.wait(min(intervals, default=5.0))
+
+    worker = threading.Thread(
+        target=monitor, name="audiobook-harness-automation", daemon=True
+    )
+    worker.start()
+    return stop, worker
 
 
 def serve_review_center(
     workspace: Path, host: str, port: int, config: Path | None = None
 ) -> None:
-    create_review_center_server(workspace, host, port, config).serve_forever()
+    server = create_review_center_server(workspace, host, port, config)
+    stop, worker = start_automation_monitor(
+        list(server.review_projects)  # type: ignore[attr-defined]
+    )
+    try:
+        server.serve_forever()
+    finally:
+        stop.set()
+        worker.join(timeout=2)
+        server.server_close()
 
 
 def _pid_path(workspace: Path, config: Path | None, port: int) -> Path:

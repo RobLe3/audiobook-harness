@@ -1,8 +1,9 @@
 # Review Center
 
 The Review Center is the local, project-agnostic listener-review surface for
-Audiobook Harness 0.6.1. It is a convenience interface over the existing
-hash-bound review contract; it is not publication authority.
+Audiobook Harness 0.7.0. It is not publication authority. When explicitly
+enabled, its server-owned monitor may start bounded convergence work without
+granting review approval or promotion authority.
 
 ## Configure projects
 
@@ -13,7 +14,12 @@ Create `review-center.json` at a workspace root:
   "version": 1,
   "default_project": "my-book",
   "projects": [
-    {"id": "my-book", "path": "projects/my-book", "display_name": "My Book"},
+    {
+      "id": "my-book",
+      "path": "projects/my-book",
+      "display_name": "My Book",
+      "automation": {"enabled": true, "poll_seconds": 5, "max_iterations": 8}
+    },
     {"id": "second-book", "path": "projects/second-book"}
   ]
 }
@@ -44,6 +50,18 @@ media, draft autosave, and finalization. The controller keeps a temporary PID
 file and refuses to operate on a mismatched process. Startup uses an exclusive
 local lease, so repeated start requests while the server is launching are
 idempotent rather than creating competing processes.
+
+## Automatic bounded repair
+
+Automation is opt-in per project. When enabled, Review Center owns a background
+monitor that starts `audiobook-harness converge PROJECT` whenever current review
+or phase evidence declares machine-actionable work. The worker reuses valid
+phase receipts, stops after a repeated evidence identity, and never promotes
+audio or fabricates review authority. GET and HEAD routes remain read-only.
+
+Use `audiobook-harness converge PROJECT --max-iterations 8` to run the same
+controller without Review Center. Missing source, configuration, or local model
+prerequisites stop as blockers rather than entering an unchanged retry loop.
 
 ## Routes
 

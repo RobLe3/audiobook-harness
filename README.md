@@ -1,6 +1,6 @@
 # Audiobook Harness
 
-Current release: **0.6.1**. Audiobook Harness uses one SemVer product identity;
+Current release: **0.7.0**. Audiobook Harness uses one SemVer product identity;
 project names and profile hashes do not create a second harness version. See
 [versioning and compatibility](docs/VERSIONING.md).
 
@@ -12,11 +12,10 @@ command is read-only and does not modify GitHub.
 
 ## Maturity and support boundary
 
-This release targets controlled, maintainer-operated local production. The
-deterministic core is testable from a clean checkout, but unattended
-multi-user operation, stable public Python API compatibility, and third-party
-operational support are not yet guarantees. Review, staging, and promotion
-remain explicit boundaries.
+This release targets controlled, maintainer-operated local production. Opt-in
+bounded repair may run unattended, but multi-user operation, stable public
+Python API compatibility, and third-party operational support are not yet
+guarantees. Review, staging, and promotion remain explicit boundaries.
 
 The hash-bound outstanding-work model separates automatic repair, current
 verification, cross-episode dependencies, focused listener review, completion,
@@ -27,7 +26,7 @@ It focuses on manuscript analysis, pronunciation control, contextual dialogue,
 Kokoro TTS, dual-checkpoint local Whisper verification, forced alignment, and reproducible
 M4A/MP3 delivery with staged promotion.
 
-Version 0.6.1 executes all eight phases as receipt-last transactions. Each
+Version 0.7.0 executes all eight phases as receipt-last transactions. Each
 phase has its own dependency identity, success predicates, retry policy, and
 structured result. A small harness or review-server change therefore cannot
 invalidate unrelated audio work. Failed implementation attempts roll back
@@ -212,9 +211,10 @@ placing a production project on a network, synchronized, or symbolic-link path.
 ## Review Center
 
 Audiobook Harness keeps the existing single-project review command and adds a
-local multi-project Review Center. The Review Center is review-only: it never
-publishes audio and never turns a draft into authority without an explicit
-finalization.
+local multi-project Review Center. It never publishes audio or turns a draft
+into authority without explicit finalization. An explicitly enabled background
+controller may perform bounded production repair while the review surface
+remains non-authoritative.
 
 Create a workspace configuration such as `review-center.json`:
 
@@ -223,7 +223,12 @@ Create a workspace configuration such as `review-center.json`:
   "version": 1,
   "default_project": "my-book",
   "projects": [
-    {"id": "my-book", "path": "projects/my-book", "display_name": "My Book"}
+    {
+      "id": "my-book",
+      "path": "projects/my-book",
+      "display_name": "My Book",
+      "automation": {"enabled": true, "poll_seconds": 5, "max_iterations": 8}
+    }
   ]
 }
 ```
@@ -245,7 +250,10 @@ audiobook-harness review-center restart --workspace-root . --config review-cente
 ```
 
 The chooser opens `/review-center/<project-id>/`. Each project has isolated
-media, draft, status, and finalize routes. The server is loopback-only and
+media, draft, status, and finalize routes. When `automation.enabled` is true,
+the server starts the built-in bounded convergence worker without requiring a
+page refresh. Status requests remain read-only, and the worker never promotes.
+Run the same controller directly with `audiobook-harness converge PROJECT`. The server is loopback-only and
 stores its PID and log in the platform temporary directory. Existing
 `audiobook-harness review PROJECT` usage remains supported.
 
@@ -275,7 +283,7 @@ See [the local interactive walkthrough instructions](docs/assets/README.md).
 
 ## v0.5 review gate
 
-Version 0.6.1 writes source-preserving analysis contracts for structure, spoken
+Version 0.7.0 writes source-preserving analysis contracts for structure, spoken
 forms, dialogue, prosody and TTS risk. After staging, run
 `audiobook-harness review PROJECT`; the loopback service saves review drafts
 directly under `production/`. Finalize decisions in the panel or with
@@ -287,7 +295,7 @@ and the documented repetition or editorial-authority threshold. Existing
 projects can inspect an upgrade with `audiobook-harness upgrade-project
 PROJECT`; applying it requires the reported inventory hash.
 
-Version 0.6.1 also exposes the production contract directly:
+Version 0.7.0 also exposes the production contract directly:
 
 ```bash
 audiobook-harness pipeline-audit PROJECT

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0
+
+- Add an opt-in, project-scoped convergence worker that starts with Review Center, resumes only evidence-bounded work, and stops for review, a no-progress identity, or its configured iteration budget.
+- Keep status requests read-only while exposing a built-in `converge` command and bounded Review Center automation settings.
+
 ## 0.6.1
 
 - Add a read-only issue-hygiene audit and a bounded hardening issue template to

@@ -25,6 +25,7 @@ def test_load_projects_is_explicit_and_uses_project_titles(tmp_path: Path):
     projects = load_projects(tmp_path)
     assert projects[0].project_id == "book"
     assert projects[0].display_name == "Example Title"
+    assert projects[0].automation_enabled is False
 
 
 def test_load_projects_rejects_paths_outside_workspace(tmp_path: Path):

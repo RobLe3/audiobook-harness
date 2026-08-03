@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import __version__
 from .convergence import append_iteration
+from .automation import converge_project
 from .feedback import compile_feedback, promote_rule
 from .measurements import build_quality_measurements
 from .parity import feature_parity
@@ -502,6 +503,12 @@ def _main() -> None:
     compatibility.add_argument("--apply", action="store_true")
     new = sub.add_parser("new-project")
     new.add_argument("directory", type=Path)
+    converge = sub.add_parser("converge")
+    converge.add_argument("project", type=Path)
+    converge.add_argument("--max-iterations", type=int, choices=range(1, 9), default=8)
+    converge.add_argument(
+        "--performance-profile", choices=("legacy", "auto"), default="auto"
+    )
     review_center = sub.add_parser("review-center")
     review_center.add_argument(
         "action", choices=("start", "stop", "restart", "status", "serve")
@@ -590,6 +597,15 @@ def _main() -> None:
     if args.command == "new-project":
         scaffold(args.directory.resolve(), REPO / "templates/project")
         emit({"ok": True, "project": str(args.directory.resolve())})
+        return
+    if args.command == "converge":
+        emit(
+            converge_project(
+                args.project.resolve(),
+                maximum_iterations=args.max_iterations,
+                performance_profile=args.performance_profile,
+            )
+        )
         return
     if args.command == "review-center":
         workspace = args.workspace_root.resolve()
