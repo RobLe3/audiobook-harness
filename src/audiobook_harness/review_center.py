@@ -21,7 +21,7 @@ from .project_lock import project_writer_lock
 from .review import build_review, finalize_review, review_status, validate_decisions
 from .automation import automation_snapshot
 
-REVIEW_CENTER_STATUS_VERSION = 2
+REVIEW_CENTER_STATUS_VERSION = 3
 
 
 @dataclass(frozen=True)

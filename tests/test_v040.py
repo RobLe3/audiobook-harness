@@ -113,6 +113,18 @@ def test_finalized_rejection_is_correction_work_not_an_unavailable_review(
     status = review_status(tmp_path)
     assert status["reviewer_action"]["code"] == "corrections_queued"
     assert not status["reviewer_action"]["enabled"]
+    assert status["listener_review_complete"]
+    assert not status["correction_work_complete"]
+    assert not status["publication_eligible"]
+    assert status["review_items"] == [
+        {
+            "id": "c1",
+            "decision_state": "feedback_received",
+            "remediation_state": "pending",
+            "review_required": False,
+            "review_item_identity_sha256": None,
+        }
+    ]
 
 
 def test_upgrade_is_inventory_bound(tmp_path: Path):

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.3
+
+- Distinguish finalized listener feedback from a genuinely new replacement that needs review.
+- Expose item-level decision, remediation, listener-complete, correction-complete, and publication-eligibility states in the Review Center API.
+- Prevent a finalized rejection or uncertainty from being presented as an unfinished review of the same audio identity.
+
 ## 0.7.2
 
 - Add a fail-visible Review Center page/API schema handshake with one automatic cache-busting reload.

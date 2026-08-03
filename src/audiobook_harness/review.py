@@ -554,9 +554,31 @@ def review_status(project: Path) -> dict[str, Any]:
         if isinstance(row, dict) and row.get("id")
     }
     pending_items = []
+    review_items = []
     for item in manifest.get("items", []):
         item_id = str(item.get("id", ""))
         decision = decisions_by_id.get(item_id, {})
+        decision_value = str(decision.get("decision") or "")
+        decision_is_current = bool(authoritative == current and decision_value)
+        review_items.append(
+            {
+                "id": item_id,
+                "decision_state": (
+                    "approved"
+                    if decision_is_current and decision_value == "approve"
+                    else "feedback_received"
+                    if decision_is_current and decision_value in {"reject", "uncertain"}
+                    else "decision_required"
+                ),
+                "remediation_state": (
+                    "pending"
+                    if decision_is_current and decision_value in {"reject", "uncertain"}
+                    else "complete"
+                ),
+                "review_required": not decision_is_current,
+                "review_item_identity_sha256": item.get("review_item_identity_sha256"),
+            }
+        )
         if decision.get("decision") != "approve":
             pending_items.append(
                 item_evidence(item, str(decision.get("defect_category") or "other"))
@@ -604,6 +626,12 @@ def review_status(project: Path) -> dict[str, Any]:
         "review_available": bool(current),
         "reviewer_action": {"code": action, "enabled": enabled},
         "review_evidence": pending_items,
+        "review_items": review_items,
+        "listener_review_complete": bool(
+            decisions.get("finalized") and authoritative == current
+        ),
+        "correction_work_complete": bool(decisions.get("ok")),
+        "publication_eligible": review_is_approved(project),
         "review_processing": read("review-processing-receipt.json"),
         "iteration": int(read("review-processing-receipt.json").get("iteration") or 0),
         "convergence": convergence_summary(project),
