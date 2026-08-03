@@ -24,6 +24,12 @@ from .automation import automation_snapshot
 REVIEW_CENTER_STATUS_VERSION = 3
 
 
+class ReusableReviewCenterServer(ThreadingHTTPServer):
+    """Allow an immediate local restart after the previous listener exits."""
+
+    allow_reuse_address = True
+
+
 @dataclass(frozen=True)
 class ReviewProject:
     project_id: str
@@ -468,7 +474,7 @@ def create_review_center_server(
             except (ValueError, OSError, json.JSONDecodeError) as error:
                 _send_json(self, {"ok": False, "error": str(error)}, 400)
 
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = ReusableReviewCenterServer((host, port), Handler)
     server.review_projects = projects  # type: ignore[attr-defined]
     return server
 

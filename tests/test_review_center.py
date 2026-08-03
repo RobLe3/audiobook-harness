@@ -72,6 +72,7 @@ def test_bare_review_center_host_redirects_to_project_chooser(tmp_path: Path):
         encoding="utf-8",
     )
     server = create_review_center_server(tmp_path, "127.0.0.1", 0)
+    assert server.allow_reuse_address is True
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     try:

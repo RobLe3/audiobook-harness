@@ -1,7 +1,7 @@
 # Review Center
 
 The Review Center is the local, project-agnostic listener-review surface for
-Audiobook Harness 0.7.4. It is not publication authority. When explicitly
+Audiobook Harness 0.7.5. It is not publication authority. When explicitly
 enabled, its server-owned monitor may start bounded convergence work without
 granting review approval or promotion authority.
 

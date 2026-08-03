@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.5
+
+- Make the Review Center listener reusable so a local stop/start cycle cannot
+  fail behind a stale TCP socket.
+- Clarify that automatic work is evidence-bounded: exhausted evidence is shown
+  as review or engineering work rather than as a repair that is still queued.
+- Record repair completion only after the production result itself is clean;
+  process exit success alone is not sufficient evidence of an audio repair.
+
 ## 0.7.4
 
 - Treat finalized rejected or uncertain review items as distinct, evidence-bound
