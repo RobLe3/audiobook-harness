@@ -46,8 +46,23 @@ def automation_snapshot(project: Path) -> dict[str, Any]:
     production = project / "production"
     status = review_status(project)
     action = str(status.get("reviewer_action", {}).get("code") or "")
+    review_items = [
+        row for row in status.get("review_items", []) if isinstance(row, dict)
+    ]
+    actionable_review_items = sorted(
+        str(row.get("id"))
+        for row in review_items
+        if row.get("remediation_state") == "pending"
+        and not row.get("review_required")
+        and row.get("id")
+    )
+    review_now = sorted(
+        str(row.get("id"))
+        for row in review_items
+        if row.get("review_required") and row.get("id")
+    )
     run = _read(production / "run-status.json")
-    automatic = action in AUTOMATIC_REVIEW_ACTIONS
+    automatic = action in AUTOMATIC_REVIEW_ACTIONS or bool(actionable_review_items)
     blocked_reason = None
     if action in {"focused_review_required", "harness_correction_required"}:
         automatic = False
@@ -59,6 +74,7 @@ def automation_snapshot(project: Path) -> dict[str, Any]:
             "repair-plan.json",
             "review-processing-receipt.json",
             "review-decisions.json",
+            "audio-first-review-manifest.json",
             "stage-manifest.json",
             "recovery-ledger.jsonl",
         )
@@ -86,6 +102,8 @@ def automation_snapshot(project: Path) -> dict[str, Any]:
         "automatic": automatic,
         "reason": blocked_reason or action or str(run.get("state") or "not_started"),
         "blocked_reason": blocked_reason,
+        "actionable_review_items": actionable_review_items,
+        "review_now": review_now,
         "input_identity": identity,
         "run_state": run.get("state", "not_started"),
         "workflow_state": (
