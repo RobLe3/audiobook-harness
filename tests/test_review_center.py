@@ -7,11 +7,21 @@ from pathlib import Path
 import audiobook_harness.review_center as review_center_module
 
 from audiobook_harness.review_center import (
+    REVIEW_CENTER_STATUS_VERSION,
+    ReviewProject,
+    _review_page,
     _pid_path,
     control,
     create_review_center_server,
     load_projects,
 )
+
+
+def test_review_page_has_status_schema_reload_handshake(tmp_path: Path):
+    page = _review_page(ReviewProject("book", tmp_path, "Book"), {"items": []}, "token")
+    assert f"statusSchema={REVIEW_CENTER_STATUS_VERSION}" in page
+    assert "review-center-schema-reload" in page
+    assert "review_center_schema" in page
 
 
 def test_load_projects_is_explicit_and_uses_project_titles(tmp_path: Path):

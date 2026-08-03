@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2
+
+- Add a fail-visible Review Center page/API schema handshake with one automatic cache-busting reload.
+- Distinguish automation execution state, convergence outcome, and whether an audio repair actually ran.
+- Keep listener summaries exhaustive and show the complete review queue without silently hiding later chapters.
+
 ## 0.7.1
 
 - Stop the Review Center automation monitor from relaunching a terminal repair

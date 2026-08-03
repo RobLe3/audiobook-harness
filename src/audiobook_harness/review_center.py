@@ -21,6 +21,8 @@ from .project_lock import project_writer_lock
 from .review import build_review, finalize_review, review_status, validate_decisions
 from .automation import automation_snapshot
 
+REVIEW_CENTER_STATUS_VERSION = 2
+
 
 @dataclass(frozen=True)
 class ReviewProject:
@@ -151,12 +153,12 @@ def _review_page(project: ReviewProject, manifest: dict[str, Any], token: str) -
     return f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Review Center · {html.escape(project.display_name)}</title>
 <style>body{{font:16px system-ui;max-width:980px;margin:auto;padding:24px;background:#0d1117;color:#edf3f8}}a{{color:#69a7d8}}section{{padding:16px 0;border-bottom:1px solid #334}}audio{{display:block;width:100%;margin:8px 0}}select,input,button{{font:inherit;margin:4px;padding:8px}}input{{min-width:320px}}.status{{position:sticky;top:0;background:#17202b;padding:10px;border-radius:8px}}</style>
 <p><a href="/review-center/">← All projects</a></p><h1>Review Center</h1><p>Project: <strong>{html.escape(project.display_name)}</strong></p><div class="status" id="status">Decisions save locally.</div>{"".join(sections)}<button id="finalize">Finalize review</button>
-<script>const token={json.dumps(token)},manifest={data},base={json.dumps(base)};const headers={{"Content-Type":"application/json","X-Audiobook-Review-Token":token}};
+<script>const token={json.dumps(token)},manifest={data},base={json.dumps(base)},statusSchema={REVIEW_CENTER_STATUS_VERSION};const headers={{"Content-Type":"application/json","X-Audiobook-Review-Token":token}};
 function decisions(){{return [...document.querySelectorAll("section")].filter(s=>s.querySelector(".decision").value).map(s=>({{id:s.dataset.id,decision:s.querySelector(".decision").value,defect_category:s.querySelector(".category").value||undefined,note:s.querySelector(".note").value||undefined}}));}}
 let timer;document.addEventListener("input",()=>{{clearTimeout(timer);timer=setTimeout(async()=>{{const r=await fetch(base+"api/review-draft",{{method:"PUT",headers,body:JSON.stringify({{decisions:decisions()}})}});document.querySelector("#status").textContent=r.ok?"Saved locally.":"Save error."}},250)}});
 fetch(base+"api/review-draft").then(r=>r.json()).then(v=>{{for(const d of v.decisions||[]){{const s=document.querySelector(`section[data-id="${{CSS.escape(d.id)}}"]`);if(!s)continue;s.querySelector(".decision").value=d.decision||"";s.querySelector(".category").value=d.defect_category||"";s.querySelector(".note").value=d.note||""}}}});
 document.querySelector("#finalize").onclick=async()=>{{const r=await fetch(base+"api/finalize-review",{{method:"POST",headers,body:JSON.stringify({{decisions:decisions()}})}});const v=await r.json();document.querySelector("#status").textContent=v.ok?"Finalized and approved.":(v.error||"Finalize failed.")}};
-async function refresh(){{const r=await fetch(base+"api/status",{{cache:"no-store"}});if(!r.ok)return;const v=await r.json();const enabled=Boolean(v.reviewer_action?.enabled),automation=v.automation||{{}};document.querySelector("#finalize").disabled=!enabled;document.querySelectorAll("audio,select,input").forEach(x=>x.disabled=!enabled);document.querySelector("#status").textContent=automation.state==="running"?`Automatic repair is running${{automation.iteration?` · iteration ${{automation.iteration}}`:""}}.`:automation.state==="blocked"?(enabled?"Automatic repair is exhausted for this evidence. Review the provisional media and submit feedback; nothing is published.":"Automatic repair is exhausted. New evidence or a focused decision is required."):enabled?"Current review media is ready. Decisions save locally.":`Reviewer action: ${{v.reviewer_action?.code||"unavailable"}}`}}refresh();setInterval(refresh,5000);</script>"""
+async function refresh(){{const r=await fetch(base+"api/status",{{cache:"no-store"}});if(!r.ok)return;const v=await r.json(),received=Number(v.review_center_status_version||0);if(received!==statusSchema){{const key=`${{statusSchema}}:${{received}}`;if(sessionStorage.getItem("review-center-schema-reload")!==key){{sessionStorage.setItem("review-center-schema-reload",key);const u=new URL(location.href);u.searchParams.set("review_center_schema",String(received));location.replace(u);return}}document.querySelector("#status").textContent=`Review Center page/API mismatch (page ${{statusSchema}}, API ${{received}}). Restart the local server and reload.`;return}}sessionStorage.removeItem("review-center-schema-reload");const enabled=Boolean(v.reviewer_action?.enabled),automation=v.automation||{{}};document.querySelector("#finalize").disabled=!enabled;document.querySelectorAll("audio,select,input").forEach(x=>x.disabled=!enabled);document.querySelector("#status").textContent=automation.state==="running"?`Automatic repair is running${{automation.iteration?` · iteration ${{automation.iteration}}`:""}}.`:automation.state==="blocked"?(enabled?"Automatic repair is exhausted for this evidence. Review the provisional media and submit feedback; nothing is published.":"Automatic repair is exhausted. New evidence or a focused decision is required."):enabled?"Current review media is ready. Decisions save locally.":`Reviewer action: ${{v.reviewer_action?.code||"unavailable"}}`}}refresh();setInterval(refresh,5000);</script>"""
 
 
 def chooser(projects: list[ReviewProject]) -> str:
@@ -224,6 +226,9 @@ def create_review_center_server(
                     return
                 if parts[2:] == ["api", "status"]:
                     status = review_status(project.root)
+                    status["review_center_status_version"] = (
+                        REVIEW_CENTER_STATUS_VERSION
+                    )
                     snapshot = automation_snapshot(project.root)
                     operation = project.root / "production/automation-operation.json"
                     try:
@@ -240,6 +245,7 @@ def create_review_center_server(
                         "workflow_state": snapshot.get("workflow_state"),
                         "execution_state": automation.get("state", "idle"),
                         "outcome_state": snapshot.get("state"),
+                        "audio_repair_executed": bool(automation.get("transitions")),
                         "iteration": automation.get("iteration")
                         or automation.get("iterations"),
                         "reason": automation.get("reason"),
