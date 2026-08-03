@@ -7,7 +7,7 @@ from audiobook_harness.versioning import compatibility_receipt
 
 def test_product_version_is_single_source_for_package_metadata():
     root = Path(__file__).parents[1]
-    assert __version__ == "0.7.3"
+    assert __version__ == "0.7.4"
     pyproject = (root / "pyproject.toml").read_text()
     assert 'dynamic = ["version"]' in pyproject
     assert re.findall(
@@ -35,7 +35,7 @@ def test_compatibility_receipt_is_hash_bound_and_non_destructive(tmp_path: Path)
     analysis = production / "analysis.json"
     analysis.write_text('{"ok":true}')
     first = compatibility_receipt(tmp_path)
-    assert first["product_version"] == "0.7.3"
+    assert first["product_version"] == "0.7.4"
     assert first["historical_artifact_family"] == "pre-semver-project"
     assert not (production / "version-compatibility-receipt.json").exists()
     stored = compatibility_receipt(tmp_path, apply=True)

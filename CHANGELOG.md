@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.4
+
+- Treat finalized rejected or uncertain review items as distinct, evidence-bound
+  automatic correction work while excluding replacement audio that is already
+  waiting for listening.
+- Include the current review manifest in the automation identity so changed
+  review media wakes the bounded controller without resetting unchanged work.
+- Expose automatic correction items and current listening items separately to
+  Review Center clients.
+
 ## 0.7.3
 
 - Distinguish finalized listener feedback from a genuinely new replacement that needs review.

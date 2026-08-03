@@ -1,6 +1,6 @@
 # Versioning and legacy compatibility
 
-Audiobook Harness **0.7.3** is the current product release. It hardens the
+Audiobook Harness **0.7.4** is the current product release. It hardens the
 opt-in convergence worker introduced in 0.7.0: an unchanged terminal repair is
 not relaunched, and Review Center distinguishes controller execution from the
 audio-production outcome. Review requests remain read-only and promotion
@@ -19,7 +19,7 @@ and strict hash-bound verification remain mandatory.
 Product releases use SemVer and are independent of report-schema integers,
 dependency versions, and local model or asset revisions.
 
-The supported maturity claim for 0.7.3 is controlled maintainer-operated local
+The supported maturity claim for 0.7.4 is controlled maintainer-operated local
 production with opt-in bounded unattended repair. Multi-user coordination,
 stable public API compatibility, and third-party operational support remain
 future goals rather than promises of this release.
@@ -27,7 +27,7 @@ future goals rather than promises of this release.
 Project-specific audiobook names and historic build labels are not harness product releases.
 Historical pre-SemVer project artifacts remain immutable and reusable through
 their hashes, but their former project-local labels are not exposed as current
-product versions. New reports identify the product as `0.7.3` and bind the
+product versions. New reports identify the product as `0.7.4` and bind the
 project configuration through `project_profile_sha256`.
 
 Run `audiobook-harness compatibility-audit PROJECT` to inspect a receipt without writing it. Add `--apply` to store `production/version-compatibility-receipt.json`. The receipt hashes existing analysis, candidate, verification, and alignment evidence without rewriting those artifacts or their historical receipts. Missing or changed evidence is never silently accepted.

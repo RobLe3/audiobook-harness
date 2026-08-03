@@ -82,6 +82,35 @@ def test_project_automation_uses_builtin_convergence_command(
     assert result == {"queued": True, "pid": 1234}
 
 
+def test_finalized_feedback_is_automatic_but_current_replacement_is_not(
+    tmp_path: Path, monkeypatch
+):
+    project = _project(tmp_path)
+    monkeypatch.setattr(
+        automation,
+        "review_status",
+        lambda _project: {
+            "reviewer_action": {"code": "none"},
+            "review_items": [
+                {
+                    "id": "submitted",
+                    "remediation_state": "pending",
+                    "review_required": False,
+                },
+                {
+                    "id": "replacement",
+                    "remediation_state": "complete",
+                    "review_required": True,
+                },
+            ],
+        },
+    )
+    snapshot = automation.automation_snapshot(project)
+    assert snapshot["automatic"] is True
+    assert snapshot["actionable_review_items"] == ["submitted"]
+    assert snapshot["review_now"] == ["replacement"]
+
+
 def test_terminal_result_suppresses_unchanged_automatic_restart(
     tmp_path: Path, monkeypatch
 ):
